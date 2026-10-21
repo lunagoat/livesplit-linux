@@ -7,6 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.DetailedTimer/src/LiveSplit.DetailedTimer/LiveSplit.DetailedTimer.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Graph/src/LiveSplit.Graph/LiveSplit.Graph.csproj" />
+
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.SumOfBest/src/LiveSplit.SumOfBest/LiveSplit.SumOfBest.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.TotalPlaytime/src/LiveSplit.TotalPlaytime/LiveSplit.TotalPlaytime.csproj" />

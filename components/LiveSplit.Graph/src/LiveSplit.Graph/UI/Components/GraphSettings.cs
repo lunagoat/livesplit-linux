@@ -3,42 +3,191 @@ using LiveSplit.Model.Comparisons;
 using System;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class GraphSettings : UserControl, ICloneable
+public class GraphSettings : SettingsBase, ICloneable
 {
-    public float GraphHeight { get; set; }
+    private float graphHeight;
+    public float GraphHeight
+    {
+        get => graphHeight;
+        set
+        {
+            if (SetField(ref graphHeight, value))
+            {
+                OnPropertyChanged(nameof(GraphHeightScaled));
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
     public float GraphHeightScaled { get => GraphHeight / 5; set => GraphHeight = value * 5; }
-    public float GraphWidth { get; set; }
+    private float graphWidth;
+    public float GraphWidth
+    {
+        get => graphWidth;
+        set
+        {
+            if (SetField(ref graphWidth, value))
+            {
+                OnPropertyChanged(nameof(GraphWidthScaled));
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
     public float GraphWidthScaled { get => GraphWidth / 10; set => GraphWidth = value * 10; }
 
-    public Color BehindGraphColor { get; set; }
-    public Color AheadGraphColor { get; set; }
-    public Color GridlinesColor { get; set; }
-    public Color PartialFillColorBehind { get; set; }
-    public Color CompleteFillColorBehind { get; set; }
-    public Color PartialFillColorAhead { get; set; }
-    public Color CompleteFillColorAhead { get; set; }
-    public Color GraphColor { get; set; }
-    public Color GraphGoldColor { get; set; }
-    public Color ShadowsColor { get; set; }
-    public Color GraphLinesColor { get; set; }
+    private Color behindGraphColor;
+    public Color BehindGraphColor
+    {
+        get => behindGraphColor;
+        set => SetField(ref behindGraphColor, value);
+    }
+    private Color aheadGraphColor;
+    public Color AheadGraphColor
+    {
+        get => aheadGraphColor;
+        set => SetField(ref aheadGraphColor, value);
+    }
+    private Color gridlinesColor;
+    public Color GridlinesColor
+    {
+        get => gridlinesColor;
+        set => SetField(ref gridlinesColor, value);
+    }
+    private Color partialFillColorBehind;
+    public Color PartialFillColorBehind
+    {
+        get => partialFillColorBehind;
+        set => SetField(ref partialFillColorBehind, value);
+    }
+    private Color completeFillColorBehind;
+    public Color CompleteFillColorBehind
+    {
+        get => completeFillColorBehind;
+        set => SetField(ref completeFillColorBehind, value);
+    }
+    private Color partialFillColorAhead;
+    public Color PartialFillColorAhead
+    {
+        get => partialFillColorAhead;
+        set => SetField(ref partialFillColorAhead, value);
+    }
+    private Color completeFillColorAhead;
+    public Color CompleteFillColorAhead
+    {
+        get => completeFillColorAhead;
+        set => SetField(ref completeFillColorAhead, value);
+    }
+    private Color graphColor;
+    public Color GraphColor
+    {
+        get => graphColor;
+        set => SetField(ref graphColor, value);
+    }
+    private Color graphGoldColor;
+    public Color GraphGoldColor
+    {
+        get => graphGoldColor;
+        set => SetField(ref graphGoldColor, value);
+    }
+    private Color shadowsColor;
+    public Color ShadowsColor
+    {
+        get => shadowsColor;
+        set => SetField(ref shadowsColor, value);
+    }
+    private Color graphLinesColor;
+    public Color GraphLinesColor
+    {
+        get => graphLinesColor;
+        set => SetField(ref graphLinesColor, value);
+    }
 
-    public bool IsLiveGraph { get; set; }
-    public bool FlipGraph { get; set; }
-    public bool ShowBestSegments { get; set; }
+    private bool isLiveGraph;
+    public bool IsLiveGraph
+    {
+        get => isLiveGraph;
+        set => SetField(ref isLiveGraph, value);
+    }
+    private bool flipGraph;
+    public bool FlipGraph
+    {
+        get => flipGraph;
+        set => SetField(ref flipGraph, value);
+    }
+    private bool showBestSegments;
+    public bool ShowBestSegments
+    {
+        get => showBestSegments;
+        set
+        {
+            if (SetField(ref showBestSegments, value))
+            {
+                OnPropertyChanged(nameof(IsBestSegmentColorEnabled));
+            }
+        }
+    }
 
-    public LayoutMode Mode { get; set; }
+    private LayoutMode mode;
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(SizeMinimum));
+                OnPropertyChanged(nameof(SizeMaximum));
+                OnPropertyChanged(nameof(SizeLabel));
+            }
+        }
+    }
 
-    public string Comparison { get; set; }
-    public LiveSplitState CurrentState { get; set; }
+    private string comparison;
+    public string Comparison
+    {
+        get => comparison;
+        set
+        {
+            if (SetField(ref comparison, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+    private LiveSplitState currentState;
+    public LiveSplitState CurrentState
+    {
+        get => currentState;
+        set
+        {
+            if (SetField(ref currentState, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+
+    public string[] ComparisonOptions => GetComparisonOptions(Comparison);
+    private string[] GetComparisonOptions(string selected)
+        => new[] { "Current Comparison" }
+            .Concat(CurrentState?.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName) ?? Enumerable.Empty<string>())
+            .Concat(string.IsNullOrEmpty(selected) ? [] : new[] { selected }).Distinct().ToArray();
+    public bool IsBestSegmentColorEnabled => ShowBestSegments;
+    public float SizeValue
+    {
+        get => Mode == LayoutMode.Vertical ? GraphHeightScaled : GraphWidthScaled;
+        set { if (Mode == LayoutMode.Vertical) { GraphHeightScaled = value; } else { GraphWidthScaled = value; } }
+    }
+    public float SizeMinimum => 3;
+    public float SizeMaximum => 40;
+    public string SizeLabel => Mode == LayoutMode.Vertical ? "Height:" : "Width:";
 
     public GraphSettings()
     {
-        InitializeComponent();
         GraphHeight = 120;
         GraphWidth = 180;
         BehindGraphColor = Color.FromArgb(115, 40, 40);
@@ -57,61 +206,6 @@ public partial class GraphSettings : UserControl, ICloneable
         ShowBestSegments = false;
         Comparison = "Current Comparison";
 
-        btnAheadColor.DataBindings.Add("BackColor", this, "AheadGraphColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnBehindColor.DataBindings.Add("BackColor", this, "BehindGraphColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnGridlinesColor.DataBindings.Add("BackColor", this, "GridlinesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnPartialColorBehind.DataBindings.Add("BackColor", this, "PartialFillColorBehind", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnCompleteColorBehind.DataBindings.Add("BackColor", this, "CompleteFillColorBehind", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnPartialColorAhead.DataBindings.Add("BackColor", this, "PartialFillColorAhead", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnCompleteColorAhead.DataBindings.Add("BackColor", this, "CompleteFillColorAhead", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnGraphColor.DataBindings.Add("BackColor", this, "GraphColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnShadowsColor.DataBindings.Add("BackColor", this, "ShadowsColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSeparatorsColor.DataBindings.Add("BackColor", this, "GraphLinesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnBestSegmentColor.DataBindings.Add("BackColor", this, "GraphGoldColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkLiveGraph.DataBindings.Add("Checked", this, "IsLiveGraph", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkFlipGraph.DataBindings.Add("Checked", this, "FlipGraph", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkShowBestSegments.DataBindings.Add("Checked", this, "ShowBestSegments", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkShowBestSegments.CheckedChanged += chkShowBestSegments_CheckedChanged;
-        cmbComparison.SelectedIndexChanged += cmbComparison_SelectedIndexChanged;
-        cmbComparison.DataBindings.Add("SelectedItem", this, "Comparison", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void chkShowBestSegments_CheckedChanged(object sender, EventArgs e)
-    {
-        btnBestSegmentColor.Enabled = lblBestSegmentColor.Enabled = chkShowBestSegments.Checked;
-    }
-
-    private void cmbComparison_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Comparison = cmbComparison.SelectedItem.ToString();
-    }
-
-    private void GraphSettings_Load(object sender, EventArgs e)
-    {
-        chkShowBestSegments_CheckedChanged(null, null);
-
-        cmbComparison.Items.Clear();
-        cmbComparison.Items.Add("Current Comparison");
-        cmbComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName).ToArray());
-        if (!cmbComparison.Items.Contains(Comparison))
-        {
-            cmbComparison.Items.Add(Comparison);
-        }
-
-        if (Mode == LayoutMode.Vertical)
-        {
-            trkHeight.DataBindings.Clear();
-            GraphHeightScaled = Math.Min(Math.Max(trkHeight.Minimum, GraphHeightScaled), trkHeight.Maximum);
-            trkHeight.DataBindings.Add("Value", this, "GraphHeightScaled", false, DataSourceUpdateMode.OnPropertyChanged);
-            heightLabel.Text = "Height:";
-        }
-        else
-        {
-            trkHeight.DataBindings.Clear();
-            GraphHeightScaled = Math.Min(Math.Max(trkHeight.Minimum, GraphHeightScaled), trkHeight.Maximum);
-            trkHeight.DataBindings.Add("Value", this, "GraphWidthScaled", false, DataSourceUpdateMode.OnPropertyChanged);
-            heightLabel.Text = "Width:";
-        }
     }
 
     public void SetSettings(XmlNode node)
@@ -201,8 +295,4 @@ public partial class GraphSettings : UserControl, ICloneable
         };
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
 }

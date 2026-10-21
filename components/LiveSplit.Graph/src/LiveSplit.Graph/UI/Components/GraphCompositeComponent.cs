@@ -3,7 +3,6 @@ using LiveSplit.Model.Comparisons;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 

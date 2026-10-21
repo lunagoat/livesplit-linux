@@ -5,41 +5,198 @@ using LiveSplit.TimeFormatters;
 using System;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class DetailedTimerSettings : UserControl
+public class DetailedTimerSettings : SettingsBase
 {
     private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
 
-    public new float Height { get; set; }
-    public new float Width { get; set; }
-    public float SegmentTimerSizeRatio { get; set; }
-    public LiveSplitState CurrentState { get; set; }
+    private float height;
+    public float Height
+    {
+        get => height;
+        set
+        {
+            if (SetField(ref height, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+    private float width;
+    public float Width
+    {
+        get => width;
+        set
+        {
+            if (SetField(ref width, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+    private float segmentTimerSizeRatio;
+    public float SegmentTimerSizeRatio
+    {
+        get => segmentTimerSizeRatio;
+        set => SetField(ref segmentTimerSizeRatio, value);
+    }
+    private LiveSplitState currentState;
+    public LiveSplitState CurrentState
+    {
+        get => currentState;
+        set
+        {
+            if (SetField(ref currentState, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+                OnPropertyChanged(nameof(Comparison2Options));
+            }
+        }
+    }
 
-    public bool TimerShowGradient { get; set; }
-    public bool OverrideTimerColors { get; set; }
-    public bool SegmentTimerShowGradient { get; set; }
-    public bool ShowSplitName { get; set; }
+    private bool timerShowGradient;
+    public bool TimerShowGradient
+    {
+        get => timerShowGradient;
+        set => SetField(ref timerShowGradient, value);
+    }
+    private bool overrideTimerColors;
+    public bool OverrideTimerColors
+    {
+        get => overrideTimerColors;
+        set
+        {
+            if (SetField(ref overrideTimerColors, value))
+            {
+                OnPropertyChanged(nameof(IsTimerColorEnabled));
+            }
+        }
+    }
+    private bool segmentTimerShowGradient;
+    public bool SegmentTimerShowGradient
+    {
+        get => segmentTimerShowGradient;
+        set => SetField(ref segmentTimerShowGradient, value);
+    }
+    private bool showSplitName;
+    public bool ShowSplitName
+    {
+        get => showSplitName;
+        set
+        {
+            if (SetField(ref showSplitName, value))
+            {
+                OnPropertyChanged(nameof(IsSplitNameEnabled));
+            }
+        }
+    }
 
-    public float IconSize { get; set; }
-    public bool DisplayIcon { get; set; }
+    private float iconSize;
+    public float IconSize
+    {
+        get => iconSize;
+        set => SetField(ref iconSize, value);
+    }
+    private bool displayIcon;
+    public bool DisplayIcon
+    {
+        get => displayIcon;
+        set
+        {
+            if (SetField(ref displayIcon, value))
+            {
+                OnPropertyChanged(nameof(IsIconSizeEnabled));
+            }
+        }
+    }
 
-    public float DecimalsSize { get; set; }
-    public float SegmentTimerDecimalsSize { get; set; }
+    private float decimalsSize;
+    public float DecimalsSize
+    {
+        get => decimalsSize;
+        set => SetField(ref decimalsSize, value);
+    }
+    private float segmentTimerDecimalsSize;
+    public float SegmentTimerDecimalsSize
+    {
+        get => segmentTimerDecimalsSize;
+        set => SetField(ref segmentTimerDecimalsSize, value);
+    }
 
-    public Color TimerColor { get; set; }
-    public Color SegmentTimerColor { get; set; }
-    public Color SegmentLabelsColor { get; set; }
-    public Color SegmentTimesColor { get; set; }
-    public Color SplitNameColor { get; set; }
+    private Color timerColor;
+    public Color TimerColor
+    {
+        get => timerColor;
+        set => SetField(ref timerColor, value);
+    }
+    private Color segmentTimerColor;
+    public Color SegmentTimerColor
+    {
+        get => segmentTimerColor;
+        set => SetField(ref segmentTimerColor, value);
+    }
+    private Color segmentLabelsColor;
+    public Color SegmentLabelsColor
+    {
+        get => segmentLabelsColor;
+        set => SetField(ref segmentLabelsColor, value);
+    }
+    private Color segmentTimesColor;
+    public Color SegmentTimesColor
+    {
+        get => segmentTimesColor;
+        set => SetField(ref segmentTimesColor, value);
+    }
+    private Color splitNameColor;
+    public Color SplitNameColor
+    {
+        get => splitNameColor;
+        set => SetField(ref splitNameColor, value);
+    }
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
+    private Color backgroundColor;
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+    private Color backgroundColor2;
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
 
-    public DeltasGradientType BackgroundGradient { get; set; }
+    private DeltasGradientType backgroundGradient;
+    public DeltasGradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(IsColor2Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
     public string GradientString
     {
         get => TimerSettings.GetBackgroundTypeString(BackgroundGradient);
@@ -63,8 +220,18 @@ public partial class DetailedTimerSettings : UserControl
             }
         }
     }
-    public string DigitsFormat { get; set; }
-    public string Accuracy { get; set; }
+    private string digitsFormat;
+    public string DigitsFormat
+    {
+        get => digitsFormat;
+        set => SetField(ref digitsFormat, value);
+    }
+    private string accuracy;
+    public string Accuracy
+    {
+        get => accuracy;
+        set => SetField(ref accuracy, value);
+    }
     private string segmentTimerFormat
     {
         get => SegmentDigitsFormat + SegmentAccuracy;
@@ -83,31 +250,173 @@ public partial class DetailedTimerSettings : UserControl
             }
         }
     }
-    public string SegmentDigitsFormat { get; set; }
-    public string SegmentAccuracy { get; set; }
-    public TimeAccuracy SegmentTimesAccuracy { get; set; }
-    public GeneralTimeFormatter SegmentTimesFormatter { get; set; } = new GeneralTimeFormatter()
+    private string segmentDigitsFormat;
+    public string SegmentDigitsFormat
     {
-        NullFormat = NullFormat.Dash,
-        Accuracy = TimeAccuracy.Hundredths
-    };
+        get => segmentDigitsFormat;
+        set => SetField(ref segmentDigitsFormat, value);
+    }
+    private string segmentAccuracy;
+    public string SegmentAccuracy
+    {
+        get => segmentAccuracy;
+        set => SetField(ref segmentAccuracy, value);
+    }
+    private TimeAccuracy segmentTimesAccuracy;
+    public TimeAccuracy SegmentTimesAccuracy
+    {
+        get => segmentTimesAccuracy;
+        set
+        {
+            if (SetField(ref segmentTimesAccuracy, value))
+            {
+                SegmentTimesFormatter.Accuracy = value;
+            }
+        }
+    }
     public string SegmentLabelsFontString => SettingsHelper.FormatFont(SegmentLabelsFont);
-    public Font SegmentLabelsFont { get; set; }
+    private Font segmentLabelsFont;
+    public Font SegmentLabelsFont
+    {
+        get => segmentLabelsFont;
+        set
+        {
+            if (SetField(ref segmentLabelsFont, value))
+            {
+                OnPropertyChanged(nameof(SegmentLabelsFontString));
+            }
+        }
+    }
     public string SegmentTimesFontString => SettingsHelper.FormatFont(SegmentTimesFont);
-    public Font SegmentTimesFont { get; set; }
+    private Font segmentTimesFont;
+    public Font SegmentTimesFont
+    {
+        get => segmentTimesFont;
+        set
+        {
+            if (SetField(ref segmentTimesFont, value))
+            {
+                OnPropertyChanged(nameof(SegmentTimesFontString));
+            }
+        }
+    }
     public string SplitNameFontString => SettingsHelper.FormatFont(SplitNameFont);
-    public Font SplitNameFont { get; set; }
+    private Font splitNameFont;
+    public Font SplitNameFont
+    {
+        get => splitNameFont;
+        set
+        {
+            if (SetField(ref splitNameFont, value))
+            {
+                OnPropertyChanged(nameof(SplitNameFontString));
+            }
+        }
+    }
 
-    public string Comparison { get; set; }
-    public string Comparison2 { get; set; }
-    public bool HideComparison { get; set; }
-    public string TimingMethod { get; set; }
+    private string comparison;
+    public string Comparison
+    {
+        get => comparison;
+        set
+        {
+            if (SetField(ref comparison, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+    private string comparison2;
+    public string Comparison2
+    {
+        get => comparison2;
+        set
+        {
+            if (SetField(ref comparison2, value))
+            {
+                OnPropertyChanged(nameof(Comparison2Options));
+            }
+        }
+    }
+    private bool hideComparison;
+    public bool HideComparison
+    {
+        get => hideComparison;
+        set
+        {
+            if (SetField(ref hideComparison, value))
+            {
+                OnPropertyChanged(nameof(IsComparison2Enabled));
+            }
+        }
+    }
+    private string timingMethod;
+    public string TimingMethod
+    {
+        get => timingMethod;
+        set => SetField(ref timingMethod, value);
+    }
 
-    public LayoutMode Mode { get; set; }
+    private LayoutMode mode;
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(SizeMinimum));
+                OnPropertyChanged(nameof(SizeMaximum));
+                OnPropertyChanged(nameof(SizeLabel));
+            }
+        }
+    }
+
+    public string[] ComparisonOptions => GetComparisonOptions(Comparison);
+    private string[] GetComparisonOptions(string selected)
+        => new[] { "Current Comparison" }
+            .Concat(CurrentState?.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName) ?? Enumerable.Empty<string>())
+            .Concat(string.IsNullOrEmpty(selected) ? [] : new[] { selected }).Distinct().ToArray();
+    public string[] Comparison2Options => GetComparisonOptions(Comparison2);
+    public static readonly string[] GradientOptions = TimerSettings.GradientOptions;
+    public static readonly string[] DigitsFormatOptions = ["1", "00:01", "0:00:01", "00:00:01"];
+    public static readonly string[] AccuracyOptions = ["", ".2", ".23", ".234"];
+    public static readonly string[] TimingMethodOptions = ["Current Timing Method", "Real Time", "Game Time"];
+    private GeneralTimeFormatter segmentTimesFormatter = new() { NullFormat = NullFormat.Dash, Accuracy = TimeAccuracy.Hundredths };
+    public GeneralTimeFormatter SegmentTimesFormatter
+    {
+        get => segmentTimesFormatter;
+        set
+        {
+            if (SetField(ref segmentTimesFormatter, value))
+            {
+                value.Accuracy = SegmentTimesAccuracy;
+            }
+        }
+    }
+    public bool IsTimerColorEnabled => OverrideTimerColors;
+    public bool IsSplitNameEnabled => ShowSplitName;
+    public bool IsIconSizeEnabled => DisplayIcon;
+    public bool IsComparison2Enabled => !HideComparison;
+    public bool IsColor1Visible => BackgroundGradient != DeltasGradientType.Plain && !GradientString.Contains("Delta");
+    public bool IsColor2Visible => !GradientString.Contains("Delta");
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set { if (IsColor1Visible) { BackgroundColor2 = value; } else { BackgroundColor = value; } }
+    }
+    public float SizeValue
+    {
+        get => Mode == LayoutMode.Horizontal ? Width : Height;
+        set { if (Mode == LayoutMode.Horizontal) { Width = value; } else { Height = value; } }
+    }
+    public float SizeMinimum => Mode == LayoutMode.Horizontal ? 50 : 20;
+    public float SizeMaximum => Mode == LayoutMode.Horizontal ? 500 : 150;
+    public string SizeLabel => T(Mode == LayoutMode.Horizontal ? "Width:" : "Height:");
 
     public DetailedTimerSettings()
     {
-        InitializeComponent();
 
         Height = 75;
         Width = 200;
@@ -149,132 +458,6 @@ public partial class DetailedTimerSettings : UserControl
         HideComparison = false;
         TimingMethod = "Current Timing Method";
 
-        chkShowGradientSegmentTimer.DataBindings.Add("Checked", this, "SegmentTimerShowGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkShowGradientTimer.DataBindings.Add("Checked", this, "TimerShowGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTimerColors.DataBindings.Add("Checked", this, "OverrideTimerColors", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSplitName.DataBindings.Add("Checked", this, "ShowSplitName", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTimerColor.DataBindings.Add("BackColor", this, "TimerColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSegmentTimerColor.DataBindings.Add("BackColor", this, "SegmentTimerColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSegmentLabelsColor.DataBindings.Add("BackColor", this, "SegmentLabelsColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSegmentTimesColor.DataBindings.Add("BackColor", this, "SegmentTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSplitNameColor.DataBindings.Add("BackColor", this, "SplitNameColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        trkSegmentTimerRatio.DataBindings.Add("Value", this, "SegmentTimerSizeRatio", false, DataSourceUpdateMode.OnPropertyChanged);
-        lblSegmentLabelsFont.DataBindings.Add("Text", this, "SegmentLabelsFontString", false, DataSourceUpdateMode.OnPropertyChanged);
-        lblSegmentTimesFont.DataBindings.Add("Text", this, "SegmentTimesFontString", false, DataSourceUpdateMode.OnPropertyChanged);
-        lblSplitNameFont.DataBindings.Add("Text", this, "SplitNameFontString", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkDisplayIcon.DataBindings.Add("Checked", this, "DisplayIcon", false, DataSourceUpdateMode.OnPropertyChanged);
-        trkIconSize.DataBindings.Add("Value", this, "IconSize", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "BackgroundGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbComparison.DataBindings.Add("SelectedItem", this, "Comparison", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbComparison2.DataBindings.Add("SelectedItem", this, "Comparison2", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkHideComparison.DataBindings.Add("Checked", this, "HideComparison", false, DataSourceUpdateMode.OnPropertyChanged);
-        trkDecimalsSize.DataBindings.Add("Value", this, "DecimalsSize", false, DataSourceUpdateMode.OnPropertyChanged);
-        trkSegmentDecimalsSize.DataBindings.Add("Value", this, "SegmentTimerDecimalsSize", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbDigitsFormat.DataBindings.Add("SelectedItem", this, "DigitsFormat", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbAccuracy.DataBindings.Add("SelectedItem", this, "Accuracy", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbSegmentDigitsFormat.DataBindings.Add("SelectedItem", this, "SegmentDigitsFormat", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbSegmentAccuracy.DataBindings.Add("SelectedItem", this, "SegmentAccuracy", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbTimingMethod.DataBindings.Add("SelectedItem", this, "TimingMethod", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void cmbTimingMethod_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        TimingMethod = cmbTimingMethod.SelectedItem.ToString();
-    }
-
-    private void cmbSegmentDigitsFormat_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        SegmentDigitsFormat = cmbSegmentDigitsFormat.SelectedItem.ToString();
-    }
-
-    private void cmbSegmentAccuracy_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        SegmentAccuracy = cmbSegmentAccuracy.SelectedItem.ToString();
-    }
-
-    private void cmbDigitsFormat_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        DigitsFormat = cmbDigitsFormat.SelectedItem.ToString();
-    }
-
-    private void cmbAccuracy_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Accuracy = cmbAccuracy.SelectedItem.ToString();
-    }
-
-    private void chkSplitName_CheckedChanged(object sender, EventArgs e)
-    {
-        label9.Enabled = label10.Enabled = lblSplitNameFont.Enabled = btnSplitNameColor.Enabled
-            = btnSplitNameFont.Enabled = chkSplitName.Checked;
-
-    }
-
-    private void chkDisplayIcon_CheckedChanged(object sender, EventArgs e)
-    {
-        label7.Enabled = trkIconSize.Enabled = chkDisplayIcon.Checked;
-    }
-
-    private void chkOverrideTimerColors_CheckedChanged(object sender, EventArgs e)
-    {
-        label1.Enabled = btnTimerColor.Enabled = chkOverrideTimerColors.Checked;
-    }
-
-    private void chkHideComparison_CheckedChanged(object sender, EventArgs e)
-    {
-        cmbComparison2.Enabled = label13.Enabled = !chkHideComparison.Checked;
-    }
-
-    private void cmbComparison2_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Comparison2 = cmbComparison2.SelectedItem.ToString();
-    }
-
-    private void cmbComparison_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Comparison = cmbComparison.SelectedItem.ToString();
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        string selectedText = cmbGradientType.SelectedItem.ToString();
-        btnColor1.Visible = selectedText != "Plain" && !selectedText.Contains("Delta");
-        btnColor2.Visible = !selectedText.Contains("Delta");
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        BackgroundGradient = (DeltasGradientType)cmbGradientType.SelectedItem;
-    }
-
-    private void cmbGradientType_Format(object sender, ListControlConvertEventArgs e)
-    {
-        e.Value = TimerSettings.GetBackgroundTypeString((DeltasGradientType)e.ListItem);
-    }
-
-    private void rdoSegmentTimesHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracySegmentTimes();
-    }
-
-    private void rdoSegmentTimesTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracySegmentTimes();
-    }
-
-    private void rdoSegmentTimesSeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracySegmentTimes();
-    }
-
-    private void UpdateAccuracySegmentTimes()
-    {
-        SegmentTimesAccuracy =
-            rdoSegmentTimesSeconds.Checked ? TimeAccuracy.Seconds
-            : rdoSegmentTimesTenths.Checked ? TimeAccuracy.Tenths
-            : rdoSegmentTimesHundredths.Checked ? TimeAccuracy.Hundredths
-            : TimeAccuracy.Milliseconds;
-
-        SegmentTimesFormatter.Accuracy = SegmentTimesAccuracy;
     }
 
     public void SetSettings(XmlNode node)
@@ -399,80 +582,4 @@ public partial class DetailedTimerSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "SegmentTimerDecimalsSize", SegmentTimerDecimalsSize);
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
-
-    private void DetailedTimerSettings_Load(object sender, EventArgs e)
-    {
-        chkHideComparison_CheckedChanged(null, null);
-        chkOverrideTimerColors_CheckedChanged(null, null);
-        chkDisplayIcon_CheckedChanged(null, null);
-        chkSplitName_CheckedChanged(null, null);
-        cmbComparison.Items.Clear();
-        cmbComparison.Items.Add("Current Comparison");
-        cmbComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName).ToArray());
-        if (!cmbComparison.Items.Contains(Comparison))
-        {
-            cmbComparison.Items.Add(Comparison);
-        }
-
-        cmbComparison2.Items.Clear();
-        cmbComparison2.Items.Add("Current Comparison");
-        cmbComparison2.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName).ToArray());
-        if (!cmbComparison2.Items.Contains(Comparison2))
-        {
-            cmbComparison2.Items.Add(Comparison2);
-        }
-
-        rdoSegmentTimesMilliseconds.Checked = SegmentTimesAccuracy == TimeAccuracy.Milliseconds;
-        rdoSegmentTimesHundredths.Checked = SegmentTimesAccuracy == TimeAccuracy.Hundredths;
-        rdoSegmentTimesTenths.Checked = SegmentTimesAccuracy == TimeAccuracy.Tenths;
-        rdoSegmentTimesSeconds.Checked = SegmentTimesAccuracy == TimeAccuracy.Seconds;
-
-        if (Mode == LayoutMode.Horizontal)
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 50;
-            trkSize.Maximum = 500;
-            trkSize.DataBindings.Add("Value", this, "Width", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Width:");
-        }
-        else
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 20;
-            trkSize.Maximum = 150;
-            trkSize.DataBindings.Add("Value", this, "Height", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Height:");
-        }
-
-        DeltasGradientType tempType = BackgroundGradient;
-        cmbGradientType.DataSource = Enum.GetValues(typeof(DeltasGradientType));
-        cmbGradientType.SelectedItem = tempType;
-    }
-
-    private void btnSegmentLabelsFont_Click(object sender, EventArgs e)
-    {
-        CustomFontDialog.FontDialog dialog = SettingsHelper.GetFontDialog(SegmentLabelsFont, 7, 26);
-        dialog.FontChanged += (s, ev) => SegmentLabelsFont = ((CustomFontDialog.FontChangedEventArgs)ev).NewFont;
-        dialog.ShowDialog(this);
-        lblSegmentLabelsFont.Text = SegmentLabelsFontString;
-    }
-
-    private void btnSegmentTimesFont_Click(object sender, EventArgs e)
-    {
-        CustomFontDialog.FontDialog dialog = SettingsHelper.GetFontDialog(SegmentTimesFont, 7, 26);
-        dialog.FontChanged += (s, ev) => SegmentTimesFont = ((CustomFontDialog.FontChangedEventArgs)ev).NewFont;
-        dialog.ShowDialog(this);
-        lblSegmentTimesFont.Text = SegmentTimesFontString;
-    }
-    private void btnSplitNameFont_Click(object sender, EventArgs e)
-    {
-        CustomFontDialog.FontDialog dialog = SettingsHelper.GetFontDialog(SplitNameFont, 7, 26);
-        dialog.FontChanged += (s, ev) => SplitNameFont = ((CustomFontDialog.FontChangedEventArgs)ev).NewFont;
-        dialog.ShowDialog(this);
-        lblSplitNameFont.Text = SplitNameFontString;
-    }
 }

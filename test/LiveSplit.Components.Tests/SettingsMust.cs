@@ -1,4 +1,4 @@
-using LiveSplit.TimeFormatters;
+﻿using LiveSplit.TimeFormatters;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 using System;
@@ -191,6 +191,8 @@ public class SettingsMust
     public static IEnumerable<object[]> SettingsTypes() =>
     [
         [typeof(TimerSettings)],
+        [typeof(DetailedTimerSettings)],
+        [typeof(GraphSettings)],
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
@@ -242,6 +244,11 @@ public class SettingsMust
         if (property.Name is "GradientString" or "SplitGradientString")
         {
             return (string)current == "Vertical" ? "Horizontal" : "Vertical";
+        }
+
+        if (t == typeof(GeneralTimeFormatter))
+        {
+            return new GeneralTimeFormatter();
         }
 
         if (t == typeof(bool))
