@@ -1,10 +1,16 @@
-cd ../../lib/livesplit-core
+#!/bin/sh
+set -e
+cd "$(dirname "$0")/../../lib/livesplit-core"
 FEATURES=parsing,image-shrinking
 BINDINGS_DIR="$(pwd)/target/livesplit-bindings"
-RUSTFLAGS="-C target-feature=+crt-static" cargo +stable-x86_64-pc-windows-msvc rustc --profile max-opt -p livesplit-core-capi --crate-type cdylib --no-default-features --features "$FEATURES" --target-dir ../../src/LiveSplit.Core/x64/target
-cp ../../src/LiveSplit.Core/x64/target/max-opt/livesplit_core.dll ../../src/LiveSplit.Core/x64/.
-RUSTFLAGS="-C target-feature=+crt-static" cargo +stable-i686-pc-windows-msvc rustc --profile max-opt -p livesplit-core-capi --crate-type cdylib --no-default-features --features "$FEATURES" --target-dir ../../src/LiveSplit.Core/x86/target
-cp ../../src/LiveSplit.Core/x86/target/max-opt/livesplit_core.dll ../../src/LiveSplit.Core/x86/.
-cd capi/bind_gen
-cargo run -- --no-default-features --features "$FEATURES" --output-dir "$BINDINGS_DIR"
-cp "$BINDINGS_DIR/LiveSplitCore.cs" ../../../../src/LiveSplit.Core/LiveSplitCore.g.cs
+NATIVE_DIR="$(pwd)/../../linux/native"
+
+cargo rustc --profile max-opt -p livesplit-core-capi --crate-type cdylib --no-default-features --features "$FEATURES"
+mkdir -p "$NATIVE_DIR"
+cp target/max-opt/liblivesplit_core.so "$NATIVE_DIR/liblivesplit_core.so"
+
+if [ "$1" = "--bindings" ]; then
+    cd capi/bind_gen
+    cargo run -- --no-default-features --features "$FEATURES" --output-dir "$BINDINGS_DIR"
+    cp "$BINDINGS_DIR/LiveSplitCore.cs" ../../../../src/LiveSplit.Core/LiveSplitCore.g.cs
+fi

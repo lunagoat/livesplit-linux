@@ -68,7 +68,7 @@ public class RunMetadata
             platformName = value;
         }
     }
-    public Platform Platform => Game?.Platforms.FirstOrDefault(x => x.Name == PlatformName);
+    public SpeedrunComSharp.Platform Platform => Game?.Platforms.FirstOrDefault(x => x.Name == PlatformName);
 
     public string RegionName
     {

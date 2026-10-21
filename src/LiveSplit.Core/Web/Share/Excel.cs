@@ -1,10 +1,10 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Model.RunSavers;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
 using System.Drawing;
 using System.IO;
-using System.Windows.Forms;
 
 namespace LiveSplit.Web.Share;
 
@@ -36,13 +36,9 @@ public class Excel : IRunUploadPlatform
 
     public bool SubmitRun(IRun run, Func<Image> screenShotFunction = null, TimingMethod method = TimingMethod.RealTime, string comment = "", params string[] additionalParams)
     {
-        using var dialog = new SaveFileDialog();
-        dialog.Filter = "Excel Sheet (*.xlsx)|*.xlsx";
-        DialogResult result = dialog.ShowDialog();
-        if (result == DialogResult.OK)
+        string path = PlatformServices.Current.ChooseSaveFile(null, "Export Excel Sheet", "Excel Sheet (*.xlsx)|*.xlsx", "splits.xlsx");
+        if (path != null)
         {
-            string path = dialog.FileName;
-
             if (!File.Exists(path))
             {
                 File.Create(path).Close();

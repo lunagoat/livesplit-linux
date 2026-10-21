@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Windows.Forms;
 using System.Xml;
 using Xunit;
 
@@ -128,7 +127,7 @@ public class LayoutSerializationFontOverridesMust
 
         public void DrawHorizontal(Graphics g, LiveSplitState state, float height, Region clipRegion) { }
         public void DrawVertical(Graphics g, LiveSplitState state, float width, Region clipRegion) { }
-        public Control GetSettingsControl(LayoutMode mode) { return null; }
+        public object GetSettingsControl(LayoutMode mode) { return null; }
 
         public XmlNode GetSettings(XmlDocument document)
         {

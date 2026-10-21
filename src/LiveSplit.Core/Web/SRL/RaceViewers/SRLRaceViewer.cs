@@ -1,5 +1,5 @@
 ﻿using LiveSplit.Model;
-using System.Diagnostics;
+using LiveSplit.Hosting;
 
 namespace LiveSplit.Web.SRL.RaceViewers;
 
@@ -8,7 +8,7 @@ public class SRLRaceViewer : IRaceViewer
     public void ShowRace(IRaceInfo race)
     {
         string url = string.Format("http://speedrunslive.com/race/{0}", race.Id);
-        Process.Start(url);
+        PlatformServices.OpenUrl(url);
     }
 
     public string Name => "SpeedRunsLive";

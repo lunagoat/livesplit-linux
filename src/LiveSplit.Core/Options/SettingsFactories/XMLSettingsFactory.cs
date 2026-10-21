@@ -1,6 +1,7 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Model.Comparisons;
 using LiveSplit.Model.RunFactories;
+using LiveSplit.Hosting;
 using LiveSplit.UI.Components;
 using LiveSplit.Web.SRL;
 using System;
@@ -55,7 +56,7 @@ public class XMLSettingsFactory : ISettingsFactory
         foreach (object layoutNode in recentLayouts.GetElementsByTagName("LayoutPath"))
         {
             var layoutElement = layoutNode as XmlElement;
-            settings.RecentLayouts.Add(layoutElement.InnerText);
+            settings.RecentLayouts.Add(PathCompat.Normalize(layoutElement.InnerText));
         }
 
         settings.EnableDPIAwareness = Environment.OSVersion.Version.Major >= Settings.DPI_AWARENESS_OS_MIN_VERSION
@@ -124,7 +125,7 @@ public class XMLSettingsFactory : ISettingsFactory
                     hotkeyProfile = splitElement.GetAttribute("lastHotkeyProfile");
                 }
 
-                string path = splitElement.InnerText;
+                string path = PathCompat.Normalize(splitElement.InnerText);
 
                 var recentSplitsFile = new RecentSplitsFile(path, method, hotkeyProfile, gameName, categoryName);
                 settings.RecentSplits.Add(recentSplitsFile);
@@ -138,7 +139,7 @@ public class XMLSettingsFactory : ISettingsFactory
             foreach (object splitNode in recentSplits.GetElementsByTagName("SplitsPath"))
             {
                 var splitElement = splitNode as XmlElement;
-                string path = splitElement.InnerText;
+                string path = PathCompat.Normalize(splitElement.InnerText);
 
                 try
                 {

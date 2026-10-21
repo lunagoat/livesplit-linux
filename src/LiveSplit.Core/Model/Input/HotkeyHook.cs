@@ -1,9 +1,18 @@
 ﻿using System;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 using System.Windows.Forms;
-using System.Windows.Input;
 
 namespace LiveSplit.Model.Input;
+
+[Flags]
+public enum ModifierKeys
+{
+    None = 0,
+    Alt = 1,
+    Control = 2,
+    Shift = 4,
+    Windows = 8,
+}
 
 public sealed class HotkeyHook : IDisposable
 {
@@ -16,10 +25,6 @@ public sealed class HotkeyHook : IDisposable
 
     private HotkeyHook()
     {
-        _window.KeyPressed += delegate (object sender, KeyPressedEventArgs args)
-        {
-            KeyPressed?.Invoke(this, args);
-        };
     }
 
     public class KeyPressedEventArgs : EventArgs
@@ -34,60 +39,88 @@ public sealed class HotkeyHook : IDisposable
         }
     }
 
-    private class Window : NativeWindow, IDisposable
+    private readonly List<(ModifierKeys Modifier, Keys Key)> registered = [];
+    private readonly object syncRoot = new();
+    private IKeyboardBackend backend;
+
+    public event EventHandler<KeyPressedEventArgs> KeyPressed;
+
+    public IKeyboardBackend Backend
     {
-        private static readonly int WM_HOTKEY = 786;
-        public event EventHandler<KeyPressedEventArgs> KeyPressed;
-        public Window()
+        get => backend ??= KeyboardBackends.Shared;
+        set
         {
-            CreateHandle(new CreateParams());
-        }
-        protected override void WndProc(ref Message m)
-        {
-            base.WndProc(ref m);
-            if (m.Msg == WM_HOTKEY)
+            if (backend != null)
             {
-                var key = (Keys)(((int)m.LParam >> 16) & 65535);
-                var modifier = (ModifierKeys)((int)m.LParam & 65535);
-                KeyPressed?.Invoke(this, new KeyPressedEventArgs(modifier, key));
+                backend.KeyDown -= Backend_KeyDown;
+            }
+
+            backend = value;
+            if (backend != null && registered.Count > 0)
+            {
+                backend.KeyDown += Backend_KeyDown;
             }
         }
-        public void Dispose()
-        {
-            DestroyHandle();
-        }
     }
-    private readonly Window _window = new();
-    private int _currentId;
-    public event EventHandler<KeyPressedEventArgs> KeyPressed;
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
     public void RegisterHotKey(ModifierKeys modifier, Keys key)
     {
-        _currentId++;
-        if (!RegisterHotKey(_window.Handle, _currentId, (uint)modifier, (uint)key))
+        lock (syncRoot)
         {
-            throw new InvalidOperationException("Couldn’t register the hot key.");
+            if (registered.Count == 0)
+            {
+                Backend.KeyDown += Backend_KeyDown;
+            }
+
+            registered.Add((modifier, key));
         }
     }
 
     public void UnregisterAllHotkeys()
     {
-        for (int i = _currentId; i > 0; i--)
+        lock (syncRoot)
         {
-            UnregisterHotKey(_window.Handle, i);
+            if (registered.Count > 0 && backend != null)
+            {
+                backend.KeyDown -= Backend_KeyDown;
+            }
+
+            registered.Clear();
+        }
+    }
+
+    private void Backend_KeyDown(object sender, KeyEventArgs e)
+    {
+        ModifierKeys modifiers = ModifierKeys.None;
+        if (e.Alt)
+        {
+            modifiers |= ModifierKeys.Alt;
         }
 
-        _currentId = 0;
+        if (e.Control)
+        {
+            modifiers |= ModifierKeys.Control;
+        }
+
+        if (e.Shift)
+        {
+            modifiers |= ModifierKeys.Shift;
+        }
+
+        bool match;
+        lock (syncRoot)
+        {
+            match = registered.Contains((modifiers, e.KeyCode));
+        }
+
+        if (match)
+        {
+            KeyPressed?.Invoke(this, new KeyPressedEventArgs(modifiers, e.KeyCode));
+        }
     }
 
     public void Dispose()
     {
         UnregisterAllHotkeys();
-        _window.Dispose();
     }
 }

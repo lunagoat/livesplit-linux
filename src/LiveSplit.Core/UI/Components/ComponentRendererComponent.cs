@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -43,7 +42,7 @@ public class ComponentRendererComponent : ComponentRenderer, IComponent
 
     public string ComponentName => throw new NotSupportedException();
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotSupportedException();
     }

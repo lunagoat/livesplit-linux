@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -98,7 +97,7 @@ public class SeparatorComponent : IComponent
     public string ComponentName
         => "----------------------------------------------------------------------------";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         return null;
     }

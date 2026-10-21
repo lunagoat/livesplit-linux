@@ -1,11 +1,10 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Windows.Forms;
 
 namespace LiveSplit.Web.Share;
 
@@ -37,7 +36,7 @@ public class Twitter : IRunUploadPlatform
     {
         ImageToClipboard(screenShotFunction());
         string uri = MakeUri(comment);
-        Process.Start(uri);
+        PlatformServices.OpenUrl(uri);
 
         return true;
     }
@@ -49,12 +48,14 @@ public class Twitter : IRunUploadPlatform
             return;
         }
 
-        Image pngImage;
-        using var stream = new MemoryStream();
-        image.Save(stream, ImageFormat.Png);
-        pngImage = Image.FromStream(stream);
-
-        Clipboard.SetDataObject(pngImage);
+        try
+        {
+            PlatformServices.Current.SetClipboardImage(image);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex);
+        }
     }
     private string MakeUri(string text)
     {

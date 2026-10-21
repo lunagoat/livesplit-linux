@@ -1,8 +1,8 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using LiveSplit.UI;
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -99,7 +99,7 @@ public class Bluesky : IRunUploadPlatform
 
         if (!rememberPassword)
         {
-            Process.Start("https://bsky.app/settings/app-passwords");
+            PlatformServices.OpenUrl("https://bsky.app/settings/app-passwords");
             DialogResult result = LoginBox.Show(
                 "Bluesky Authentication",
                 "Enter the full name of your Bluesky handle:",

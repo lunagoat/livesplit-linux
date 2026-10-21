@@ -1,7 +1,7 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
-using System.Windows.Forms;
 
 namespace LiveSplit.Web.Share;
 
@@ -29,12 +29,10 @@ public class Screenshot : IRunUploadPlatform
         {
             System.Drawing.Image image = screenShotFunction();
 
-            using var dialog = new SaveFileDialog();
-            dialog.Filter = "PNG (*.png)|*.png|JPEG (*.jpeg)|*.jpeg|GIF (*.gif)|*.gif|Bitmap (*.bmp)|*.bmp|TIFF (*.tiff)|*.tiff|WMF (*.wmf)|*.wmf";
-            DialogResult result = dialog.ShowDialog();
-            if (result == DialogResult.OK)
+            string path = PlatformServices.Current.ChooseSaveFile(null, "Save Screenshot", "PNG (*.png)|*.png|JPEG (*.jpeg)|*.jpeg|GIF (*.gif)|*.gif|Bitmap (*.bmp)|*.bmp|TIFF (*.tiff)|*.tiff", "screenshot.png");
+            if (path != null)
             {
-                image.Save(dialog.FileName);
+                image.Save(path);
                 return true;
             }
         }

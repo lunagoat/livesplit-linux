@@ -24,85 +24,58 @@ SOFTWARE.
 
 */
 
-using Microsoft.Win32.SafeHandles;
+using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Text;
+using System.Text.Json;
+using System.Threading;
 
 namespace LiveSplit.Web;
 
+public interface ICredentialStore
+{
+    Credential Read(string applicationName);
+    bool Write(string applicationName, string userName, string secret);
+    bool Delete(string applicationName);
+}
+
 public static class CredentialManager
 {
-    public static Credential ReadCredential(string applicationName)
-    {
-        bool read = CredRead(applicationName, CredentialType.Generic, 0, out IntPtr nCredPtr);
-        if (read)
-        {
-            using var critCred = new CriticalCredentialHandle(nCredPtr);
-            CREDENTIAL cred = critCred.GetCredential();
-            return ReadCredential(cred);
-        }
+    private static ICredentialStore store;
 
-        return null;
+    public static ICredentialStore Store
+    {
+        get => store ??= CreateDefaultStore();
+        set => store = value;
     }
 
-    private static Credential ReadCredential(CREDENTIAL credential)
+    private static ICredentialStore CreateDefaultStore()
     {
-        string applicationName = Marshal.PtrToStringUni(credential.TargetName);
-        string userName = Marshal.PtrToStringUni(credential.UserName);
-        string secret = null;
-        if (credential.CredentialBlob != IntPtr.Zero)
-        {
-            secret = Marshal.PtrToStringUni(credential.CredentialBlob, (int)credential.CredentialBlobSize / 2);
-        }
+        var file = new FileCredentialStore(Path.Combine(Paths.ConfigDirectory, "credentials.json"));
+        return SecretToolCredentialStore.IsAvailable
+            ? new FallbackCredentialStore(new SecretToolCredentialStore(), file)
+            : file;
+    }
 
-        return new Credential(credential.Type, applicationName, userName, secret);
+    public static Credential ReadCredential(string applicationName)
+    {
+        return Store.Read(applicationName);
     }
 
     public static void WriteCredential(string applicationName, string userName, string secret)
     {
-        byte[] byteArray = secret == null ? null : Encoding.Unicode.GetBytes(secret);
-        // XP and Vista: 512;
-        // 7 and above: 5*512
-        if (Environment.OSVersion.Version < new Version(6, 1) /* Windows 7 */)
+        if (applicationName == null)
         {
-            if (byteArray is { Length: > 512 })
-            {
-                throw new ArgumentOutOfRangeException("secret", "The secret message has exceeded 512 bytes.");
-            }
-        }
-        else
-        {
-            if (byteArray is { Length: > 512 * 5 })
-            {
-                throw new ArgumentOutOfRangeException("secret", "The secret message has exceeded 2560 bytes.");
-            }
+            throw new ArgumentNullException(nameof(applicationName));
         }
 
-        var credential = new CREDENTIAL
+        if (!Store.Write(applicationName, userName ?? "", secret ?? ""))
         {
-            AttributeCount = 0,
-            Attributes = IntPtr.Zero,
-            Comment = IntPtr.Zero,
-            TargetAlias = IntPtr.Zero,
-            Type = CredentialType.Generic,
-            Persist = (uint)CredentialPersistence.LocalMachine,
-            CredentialBlobSize = (uint)(byteArray == null ? 0 : byteArray.Length),
-            TargetName = Marshal.StringToCoTaskMemUni(applicationName),
-            CredentialBlob = Marshal.StringToCoTaskMemUni(secret),
-            UserName = Marshal.StringToCoTaskMemUni(userName ?? Environment.UserName)
-        };
-
-        bool written = CredWrite(ref credential, 0);
-        Marshal.FreeCoTaskMem(credential.TargetName);
-        Marshal.FreeCoTaskMem(credential.CredentialBlob);
-        Marshal.FreeCoTaskMem(credential.UserName);
-
-        if (!written)
-        {
-            int lastError = Marshal.GetLastWin32Error();
-            throw new Exception(string.Format("CredWrite failed with the error code {0}.", lastError));
+            throw new InvalidOperationException("Unable to store the credential.");
         }
     }
 
@@ -113,87 +86,240 @@ public static class CredentialManager
 
     public static void DeleteCredential(string applicationName)
     {
-        if (applicationName == null)
-        {
-            throw new ArgumentNullException(nameof(applicationName));
-        }
+        Store.Delete(applicationName);
+    }
+}
 
-        if (!CredentialExists(applicationName))
-        {
-            return;
-        }
+public sealed class FallbackCredentialStore : ICredentialStore
+{
+    private readonly ICredentialStore primary;
+    private readonly ICredentialStore fallback;
 
-        bool success = CredDelete(applicationName, CredentialType.Generic, 0);
-        if (!success)
-        {
-            int lastError = Marshal.GetLastWin32Error();
-            throw new Win32Exception(lastError);
-        }
+    public FallbackCredentialStore(ICredentialStore primary, ICredentialStore fallback)
+    {
+        this.primary = primary;
+        this.fallback = fallback;
     }
 
-    [DllImport("Advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredRead(string target, CredentialType type, int reservedFlag, out IntPtr credentialPtr);
-
-    [DllImport("Advapi32.dll", EntryPoint = "CredDeleteW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredDelete(string target, CredentialType type, int reservedFlag);
-
-    [DllImport("Advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredWrite([In] ref CREDENTIAL userCredential, [In] uint flags);
-
-    [DllImport("Advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
-    private static extern bool CredFree([In] IntPtr cred);
-
-    private enum CredentialPersistence : uint
+    public Credential Read(string applicationName)
     {
-        Session = 1,
-        LocalMachine,
-        Enterprise
+        return primary.Read(applicationName) ?? fallback.Read(applicationName);
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct CREDENTIAL
+    public bool Write(string applicationName, string userName, string secret)
     {
-        public uint Flags;
-        public CredentialType Type;
-        public IntPtr TargetName;
-        public IntPtr Comment;
-        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
-        public uint CredentialBlobSize;
-        public IntPtr CredentialBlob;
-        public uint Persist;
-        public uint AttributeCount;
-        public IntPtr Attributes;
-        public IntPtr TargetAlias;
-        public IntPtr UserName;
-    }
-
-    private sealed class CriticalCredentialHandle : CriticalHandleZeroOrMinusOneIsInvalid
-    {
-        public CriticalCredentialHandle(IntPtr preexistingHandle)
+        if (primary.Write(applicationName, userName, secret))
         {
-            SetHandle(preexistingHandle);
+            fallback.Delete(applicationName);
+            return true;
         }
 
-        public CREDENTIAL GetCredential()
+        return fallback.Write(applicationName, userName, secret);
+    }
+
+    public bool Delete(string applicationName)
+    {
+        bool a = primary.Delete(applicationName);
+        bool b = fallback.Delete(applicationName);
+        return a || b;
+    }
+}
+
+public sealed class FileCredentialStore : ICredentialStore
+{
+    private static readonly object SyncRoot = new();
+    private readonly string path;
+
+    public FileCredentialStore(string path)
+    {
+        this.path = path;
+    }
+
+    private sealed class Entry
+    {
+        public string UserName { get; set; }
+        public string Secret { get; set; }
+    }
+
+    private Dictionary<string, Entry> Load()
+    {
+        try
         {
-            if (!IsInvalid)
+            if (File.Exists(path))
             {
-                var credential = (CREDENTIAL)Marshal.PtrToStructure(handle, typeof(CREDENTIAL));
-                return credential;
+                return JsonSerializer.Deserialize<Dictionary<string, Entry>>(File.ReadAllText(path)) ?? [];
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex);
+        }
+
+        return [];
+    }
+
+    private bool Save(Dictionary<string, Entry> entries)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            string temp = path + ".tmp";
+            var options = new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            };
+            using (var stream = new FileStream(temp, options))
+            {
+                stream.Write(JsonSerializer.SerializeToUtf8Bytes(entries));
             }
 
-            throw new InvalidOperationException("Invalid CriticalHandle!");
+            File.Move(temp, path, true);
+            return true;
         }
-
-        protected override bool ReleaseHandle()
+        catch (Exception ex)
         {
-            if (!IsInvalid)
+            Log.Error(ex);
+            return false;
+        }
+    }
+
+    public Credential Read(string applicationName)
+    {
+        lock (SyncRoot)
+        {
+            return Load().TryGetValue(applicationName, out Entry entry)
+                ? new Credential(CredentialType.Generic, applicationName, entry.UserName, entry.Secret)
+                : null;
+        }
+    }
+
+    public bool Write(string applicationName, string userName, string secret)
+    {
+        lock (SyncRoot)
+        {
+            Dictionary<string, Entry> entries = Load();
+            entries[applicationName] = new Entry { UserName = userName, Secret = secret };
+            return Save(entries);
+        }
+    }
+
+    public bool Delete(string applicationName)
+    {
+        lock (SyncRoot)
+        {
+            Dictionary<string, Entry> entries = Load();
+            return entries.Remove(applicationName) && Save(entries);
+        }
+    }
+}
+
+public sealed class SecretToolCredentialStore : ICredentialStore
+{
+    private const string Executable = "secret-tool";
+
+    private sealed class Payload
+    {
+        public string UserName { get; set; }
+        public string Secret { get; set; }
+    }
+
+    public static bool IsAvailable
+    {
+        get
+        {
+            string path = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrEmpty(path))
             {
-                CredFree(handle);
-                SetHandleAsInvalid();
-                return true;
+                return false;
             }
 
+            foreach (string dir in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (File.Exists(Path.Combine(dir, Executable)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public Credential Read(string applicationName)
+    {
+        if (!Run(["lookup", "application", "livesplit", "name", applicationName], null, out string output))
+        {
+            return null;
+        }
+
+        try
+        {
+            Payload payload = JsonSerializer.Deserialize<Payload>(output);
+            return payload == null
+                ? null
+                : new Credential(CredentialType.Generic, applicationName, payload.UserName, payload.Secret);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public bool Write(string applicationName, string userName, string secret)
+    {
+        string json = JsonSerializer.Serialize(new Payload { UserName = userName, Secret = secret });
+        return Run(["store", "--label=LiveSplit: " + applicationName, "application", "livesplit", "name", applicationName], json, out _);
+    }
+
+    public bool Delete(string applicationName)
+    {
+        return Run(["clear", "application", "livesplit", "name", applicationName], null, out _);
+    }
+
+    private static bool Run(string[] args, string stdin, out string output)
+    {
+        output = null;
+        try
+        {
+            var startInfo = new ProcessStartInfo(Executable)
+            {
+                RedirectStandardInput = stdin != null,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+            foreach (string arg in args)
+            {
+                startInfo.ArgumentList.Add(arg);
+            }
+
+            using Process process = Process.Start(startInfo);
+            if (process == null)
+            {
+                return false;
+            }
+
+            if (stdin != null)
+            {
+                process.StandardInput.Write(stdin);
+                process.StandardInput.Close();
+            }
+
+            string stderr = process.StandardError.ReadToEndAsync().GetAwaiter().GetResult();
+            output = process.StandardOutput.ReadToEnd();
+            if (!process.WaitForExit(10000))
+            {
+                process.Kill();
+                return false;
+            }
+
+            return process.ExitCode == 0 && (args[0] != "lookup" || output.Length > 0);
+        }
+        catch
+        {
             return false;
         }
     }
@@ -202,12 +328,12 @@ public static class CredentialManager
 public enum CredentialType
 {
     Generic = 1,
-    DomainPassword,
-    DomainCertificate,
-    DomainVisiblePassword,
-    GenericCertificate,
-    DomainExtended,
-    Maximum,
+    DomainPassword = 2,
+    DomainCertificate = 3,
+    DomainVisiblePassword = 4,
+    GenericCertificate = 5,
+    DomainExtended = 6,
+    Maximum = 7,
     MaximumEx = Maximum + 1000,
 }
 
@@ -231,6 +357,6 @@ public class Credential
 
     public override string ToString()
     {
-        return string.Format("CredentialType: {0}, ApplicationName: {1}, UserName: {2}, Password: {3}", CredentialType, ApplicationName, UserName, Password);
+        return string.Format("CredentialType: {0}, ApplicationName: {1}, UserName: {2}, Password: {3}", CredentialType, ApplicationName, UserName, "********");
     }
 }

@@ -1,10 +1,11 @@
 ﻿using LiveSplit.Options;
+using LiveSplit.Hosting;
 using LiveSplit.Web.Share;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace LiveSplit.Web;
 
@@ -18,7 +19,7 @@ public class CompositeGameList
 
     protected IDictionary<string, string> gameIDs;
 
-    private const string CacheFilename = "speedruncom_game_names.json";
+    private static string CacheFilename => Path.Combine(Paths.CacheDirectory, "speedruncom_game_names.json");
     private bool loadedFromAPI = false;
 
     protected CompositeGameList()
@@ -88,14 +89,15 @@ public class CompositeGameList
 
     private void SaveToCache()
     {
-        string jsonString = new JavaScriptSerializer().Serialize(gameIDs);
+        string jsonString = JsonSerializer.Serialize(gameIDs);
+        Directory.CreateDirectory(Paths.CacheDirectory);
         File.WriteAllText(CacheFilename, jsonString);
     }
 
     private void LoadFromCache()
     {
         string jsonString = File.ReadAllText(CacheFilename);
-        gameIDs = new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(jsonString);
+        gameIDs = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonString);
         gameNames = gameIDs.Keys.ToArray();
     }
 }

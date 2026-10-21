@@ -1,17 +1,16 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI;
 
 public class Invalidator : IInvalidator
 {
-    public Form Form { get; protected set; }
+    public IFormHost Form { get; protected set; }
     public Matrix Transform { get; set; }
     protected const double Offset = 0.535;
 
-    public Invalidator(Form form)
+    public Invalidator(IFormHost form)
     {
         Transform = new Matrix();
         Form = form;
@@ -43,6 +42,6 @@ public class Invalidator : IInvalidator
             (int)Math.Ceiling(offsetY),
             (int)Math.Ceiling(points[1].X - offsetX - Offset),
             (int)Math.Ceiling(points[1].Y - offsetY - Offset));
-        Form.Invalidate(rect);
+        Form?.Invalidate(rect);
     }
 }

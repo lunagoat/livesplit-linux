@@ -1,5 +1,5 @@
 ﻿using LiveSplit.Model;
-using System.Diagnostics;
+using LiveSplit.Hosting;
 using System.Text;
 
 namespace LiveSplit.Web.SRL.RaceViewers;
@@ -17,7 +17,7 @@ public class MultiTwitch : IRaceViewer
         }
 
         builder.Length -= 1;
-        Process.Start(builder.ToString());
+        PlatformServices.OpenUrl(builder.ToString());
     }
 
     public string Name => "MultiTwitch";

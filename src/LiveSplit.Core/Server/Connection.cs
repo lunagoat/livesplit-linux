@@ -28,6 +28,9 @@ public class Connection : IConnection, IDisposable
     protected StreamWriter Writer { get; private set; }
     protected Thread ReaderThread { get; private set; }
 
+    private bool disposed;
+    private int disconnectedRaised;
+
     public event MessageEventHandler MessageReceived;
     public event EventHandler Disconnected;
 
@@ -41,7 +44,7 @@ public class Connection : IConnection, IDisposable
             NewLine = "\n"
         };
 
-        ReaderThread = new Thread(new ThreadStart(ReadCommands));
+        ReaderThread = new Thread(new ThreadStart(ReadCommands)) { IsBackground = true };
         ReaderThread.Start();
     }
 
@@ -66,7 +69,15 @@ public class Connection : IConnection, IDisposable
             }
         }
 
-        Disconnected?.Invoke(this, EventArgs.Empty);
+        RaiseDisconnected();
+    }
+
+    private void RaiseDisconnected()
+    {
+        if (Interlocked.Exchange(ref disconnectedRaised, 1) == 0)
+        {
+            Disconnected?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public void SendMessage(string message)
@@ -79,16 +90,35 @@ public class Connection : IConnection, IDisposable
         catch (Exception e)
         {
             Log.Error(e);
-            Disconnected?.Invoke(this, EventArgs.Empty);
+            RaiseDisconnected();
         }
     }
 
     public virtual void Dispose()
     {
-        ReaderThread.Abort();
-        Stream.Dispose();
-        Reader.Dispose();
-        Writer.Dispose();
+        if (disposed)
+        {
+            return;
+        }
+
+        disposed = true;
+        try
+        {
+            Stream.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            Reader.Dispose();
+        }
+        catch { }
+
+        try
+        {
+            Writer.Dispose();
+        }
+        catch { }
     }
 }
 

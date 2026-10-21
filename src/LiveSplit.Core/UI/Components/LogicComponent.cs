@@ -40,7 +40,7 @@ public abstract class LogicComponent : IComponent
     {
     }
 
-    public abstract System.Windows.Forms.Control GetSettingsControl(LayoutMode mode);
+    public abstract object GetSettingsControl(LayoutMode mode);
 
     public abstract System.Xml.XmlNode GetSettings(System.Xml.XmlDocument document);
 

@@ -2,7 +2,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Globalization;
 using System.IO;
@@ -11,7 +10,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace LiveSplit.Web;
 
@@ -41,13 +40,57 @@ public static class JSON
 
     public static dynamic FromString(string value)
     {
-        var serializer = new JavaScriptSerializer()
+        if (string.IsNullOrWhiteSpace(value))
         {
-            MaxJsonLength = int.MaxValue
-        };
-        serializer.RegisterConverters([new DynamicJsonConverter()]);
+            return null;
+        }
 
-        return serializer.Deserialize<object>(value);
+        using var document = JsonDocument.Parse(value);
+        object parsed = Convert(document.RootElement);
+        return parsed is IDictionary<string, object> dictionary ? new DynamicJsonObject(dictionary) : parsed;
+    }
+
+    private static object Convert(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var dictionary = new Dictionary<string, object>();
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    dictionary[property.Name] = Convert(property.Value);
+                }
+
+                return dictionary;
+            case JsonValueKind.Array:
+                var list = new ArrayList();
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    list.Add(Convert(item));
+                }
+
+                return list;
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                if (element.TryGetInt32(out int i))
+                {
+                    return i;
+                }
+
+                if (element.TryGetInt64(out long l))
+                {
+                    return l;
+                }
+
+                return element.TryGetDecimal(out decimal m) ? m : element.GetDouble();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            default:
+                return null;
+        }
     }
 
     public static dynamic FromUri(Uri uri)
@@ -90,26 +133,6 @@ public static class JSON
         using WebResponse response = request.GetResponse();
         return FromResponse(response);
     }
-}
-
-public sealed class DynamicJsonConverter : JavaScriptConverter
-{
-    public override object Deserialize(IDictionary<string, object> dictionary, Type type, JavaScriptSerializer serializer)
-    {
-        if (dictionary == null)
-        {
-            throw new ArgumentNullException(nameof(dictionary));
-        }
-
-        return type == typeof(object) ? new DynamicJsonObject(dictionary) : null;
-    }
-
-    public override IDictionary<string, object> Serialize(object obj, JavaScriptSerializer serializer)
-    {
-        throw new NotImplementedException();
-    }
-
-    public override IEnumerable<Type> SupportedTypes => new ReadOnlyCollection<Type>([typeof(object)]);
 }
 
 public sealed class DynamicJsonObject : DynamicObject

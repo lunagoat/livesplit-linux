@@ -3,11 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-
-using SizeT = System.UIntPtr;
 
 // Note: Please be careful when modifying this because it could break existing components!
 // http://stackoverflow.com/questions/1456785/a-definitive-guide-to-api-breaking-changes-in-net
@@ -38,8 +35,6 @@ public enum ReadStringType
 
 public static class ExtensionMethods
 {
-    private static readonly Dictionary<int, ProcessModuleWow64Safe[]> ModuleCache = [];
-
     public static ProcessModuleWow64Safe MainModuleWow64Safe(this Process p)
     {
         return p.ModulesWow64Safe()[0];
@@ -47,99 +42,20 @@ public static class ExtensionMethods
 
     public static ProcessModuleWow64Safe[] ModulesWow64Safe(this Process p)
     {
-        if (ModuleCache.Count > 100)
+        ProcessModuleWow64Safe[] modules = ProcessMemory.GetModules(p.Id);
+        if (modules.Length == 0)
         {
-            ModuleCache.Clear();
+            throw new Win32Exception("Unable to enumerate the modules of the process.");
         }
 
-        const int LIST_MODULES_ALL = 3;
-        const int MAX_PATH = 260;
-
-        if (!WinAPI.EnumProcessModulesEx(p.Handle, null, 0, out uint cbNeeded, LIST_MODULES_ALL))
-        {
-            throw new Win32Exception();
-        }
-
-        uint numMods = cbNeeded / (uint)Unsafe.SizeOf<IntPtr>();
-
-        int hash = p.StartTime.GetHashCode() + p.Id + (int)numMods;
-        if (ModuleCache.ContainsKey(hash))
-        {
-            return ModuleCache[hash];
-        }
-
-        var hModules = new IntPtr[(int)numMods];
-        if (!WinAPI.EnumProcessModulesEx(p.Handle, hModules, cbNeeded, out _, LIST_MODULES_ALL))
-        {
-            throw new Win32Exception();
-        }
-
-        var ret = new List<ProcessModuleWow64Safe>();
-
-        // everything below is fairly expensive, which is why we cache!
-        var sb = new StringBuilder(MAX_PATH);
-        for (int i = 0; i < numMods; i++)
-        {
-            sb.Clear();
-            if (WinAPI.GetModuleFileNameExW(p.Handle, hModules[i], sb, (uint)sb.Capacity) == 0)
-            {
-                throw new Win32Exception();
-            }
-
-            string fileName = sb.ToString();
-
-            sb.Clear();
-            if (WinAPI.GetModuleBaseNameW(p.Handle, hModules[i], sb, (uint)sb.Capacity) == 0)
-            {
-                throw new Win32Exception();
-            }
-
-            string baseName = sb.ToString();
-
-            var moduleInfo = new WinAPI.MODULEINFO();
-            if (!WinAPI.GetModuleInformation(p.Handle, hModules[i], out moduleInfo, (uint)Marshal.SizeOf(moduleInfo)))
-            {
-                throw new Win32Exception();
-            }
-
-            ret.Add(new ProcessModuleWow64Safe()
-            {
-                FileName = fileName,
-                BaseAddress = moduleInfo.lpBaseOfDll,
-                ModuleMemorySize = (int)moduleInfo.SizeOfImage,
-                EntryPointAddress = moduleInfo.EntryPoint,
-                ModuleName = baseName
-            });
-        }
-
-        ModuleCache[hash] = [.. ret];
-
-        return [.. ret];
+        return [.. modules];
     }
 
     public static IEnumerable<MemoryBasicInformation> MemoryPages(this Process process, bool all = false)
     {
-        // hardcoded values because GetSystemInfo / GetNativeSystemInfo can't return info for remote process
-        long min = 0x10000L;
-        long max = process.Is64Bit() ? 0x00007FFFFFFEFFFFL : 0x7FFEFFFFL;
-
-        var mbiSize = (SizeT)Marshal.SizeOf(typeof(MemoryBasicInformation));
-
-        long addr = min;
-        do
+        foreach (MemoryMapEntry entry in ProcessMemory.ReadMaps(process.Id))
         {
-            if (WinAPI.VirtualQueryEx(process.Handle, (IntPtr)addr, out MemoryBasicInformation mbi, mbiSize) == SizeT.Zero)
-            {
-                break;
-            }
-
-            addr += (long)mbi.RegionSize;
-
-            // don't care about reserved/free pages
-            if (mbi.State != MemPageState.MEM_COMMIT)
-            {
-                continue;
-            }
+            MemoryBasicInformation mbi = ProcessMemory.ToBasicInformation(entry);
 
             // probably don't care about guarded pages
             if (!all && (mbi.Protect & MemPageProtect.PAGE_GUARD) != 0)
@@ -154,19 +70,12 @@ public static class ExtensionMethods
             }
 
             yield return mbi;
-
-        } while (addr < max);
+        }
     }
 
     public static bool Is64Bit(this Process process)
     {
-        WinAPI.IsWow64Process(process.Handle, out bool procWow64);
-        if (Environment.Is64BitOperatingSystem && !procWow64)
-        {
-            return true;
-        }
-
-        return false;
+        return ProcessMemory.Is64Bit(process.Id);
     }
 
     public static bool ReadValue<T>(this Process process, IntPtr addr, out T val) where T : struct
@@ -205,8 +114,8 @@ public static class ExtensionMethods
         byte[] bytes = new byte[count];
 
         val = null;
-        if (!WinAPI.ReadProcessMemory(process.Handle, addr, bytes, (SizeT)bytes.Length, out SizeT read)
-            || read != (SizeT)bytes.Length)
+        if (!ProcessMemory.TryRead(process.Id, (ulong)(long)addr, bytes, bytes.Length, out int read)
+            || read != bytes.Length)
         {
             return false;
         }
@@ -226,8 +135,8 @@ public static class ExtensionMethods
         byte[] bytes = new byte[is64Bit ? 8 : 4];
 
         val = IntPtr.Zero;
-        if (!WinAPI.ReadProcessMemory(process.Handle, addr, bytes, (SizeT)bytes.Length, out SizeT read)
-            || read != (SizeT)bytes.Length)
+        if (!ProcessMemory.TryRead(process.Id, (ulong)(long)addr, bytes, bytes.Length, out int read)
+            || read != bytes.Length)
         {
             return false;
         }
@@ -264,15 +173,15 @@ public static class ExtensionMethods
     public static bool ReadString(this Process process, IntPtr addr, ReadStringType type, StringBuilder sb)
     {
         byte[] bytes = new byte[sb.Capacity];
-        if (!WinAPI.ReadProcessMemory(process.Handle, addr, bytes, (SizeT)bytes.Length, out SizeT read)
-            || read != (SizeT)bytes.Length)
+        if (!ProcessMemory.TryRead(process.Id, (ulong)(long)addr, bytes, bytes.Length, out int read)
+            || read != bytes.Length)
         {
             return false;
         }
 
         if (type == ReadStringType.AutoDetect)
         {
-            if ((ulong)read >= 2 && bytes[1] == '\x0')
+            if (read >= 2 && bytes[1] == '\x0')
             {
                 sb.Append(Encoding.Unicode.GetString(bytes));
             }
@@ -371,8 +280,8 @@ public static class ExtensionMethods
 
     public static bool WriteBytes(this Process process, IntPtr addr, byte[] bytes)
     {
-        if (!WinAPI.WriteProcessMemory(process.Handle, addr, bytes, (SizeT)bytes.Length, out SizeT written)
-            || written != (SizeT)bytes.Length)
+        if (!ProcessMemory.TryWrite(process.Id, (ulong)(long)addr, bytes, bytes.Length, out int written)
+            || written != bytes.Length)
         {
             return false;
         }
@@ -535,31 +444,29 @@ public static class ExtensionMethods
 
     public static IntPtr AllocateMemory(this Process process, int size)
     {
-        return WinAPI.VirtualAllocEx(process.Handle, IntPtr.Zero, (SizeT)size, (uint)MemPageState.MEM_COMMIT,
-            MemPageProtect.PAGE_EXECUTE_READWRITE);
+        return IntPtr.Zero;
     }
 
     public static bool FreeMemory(this Process process, IntPtr addr)
     {
-        const uint MEM_RELEASE = 0x8000;
-        return WinAPI.VirtualFreeEx(process.Handle, addr, SizeT.Zero, MEM_RELEASE);
+        return false;
     }
 
     public static bool VirtualProtect(this Process process, IntPtr addr, int size, MemPageProtect protect,
         out MemPageProtect oldProtect)
     {
-        return WinAPI.VirtualProtectEx(process.Handle, addr, (SizeT)size, protect, out oldProtect);
+        oldProtect = default;
+        return false;
     }
 
     public static bool VirtualProtect(this Process process, IntPtr addr, int size, MemPageProtect protect)
     {
-        return WinAPI.VirtualProtectEx(process.Handle, addr, (SizeT)size, protect, out MemPageProtect oldProtect);
+        return false;
     }
 
     public static IntPtr CreateThread(this Process process, IntPtr startAddress, IntPtr parameter)
     {
-        return WinAPI.CreateRemoteThread(process.Handle, IntPtr.Zero, SizeT.Zero, startAddress, parameter, 0,
-            out IntPtr threadId);
+        return IntPtr.Zero;
     }
 
     public static IntPtr CreateThread(this Process process, IntPtr startAddress)
@@ -569,12 +476,12 @@ public static class ExtensionMethods
 
     public static void Suspend(this Process process)
     {
-        WinAPI.NtSuspendProcess(process.Handle);
+        ProcessMemory.Signal(process.Id, 19);
     }
 
     public static void Resume(this Process process)
     {
-        WinAPI.NtResumeProcess(process.Handle);
+        ProcessMemory.Signal(process.Id, 18);
     }
 
     public static float ToFloatBits(this uint i)

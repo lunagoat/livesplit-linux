@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -34,7 +33,7 @@ public class LineComponent : IComponent
 
     public float MinimumWidth => 0f;
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotImplementedException();
     }
