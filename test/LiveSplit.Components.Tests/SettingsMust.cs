@@ -1,4 +1,6 @@
 ﻿using LiveSplit.TimeFormatters;
+﻿extern alias Subsplits;
+using LiveSplit.TimeFormatters;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 using System;
@@ -197,6 +199,7 @@ public class SettingsMust
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
         [typeof(SplitsSettings)],
+        [typeof(Subsplits::LiveSplit.UI.Components.SplitsSettings)],
         [typeof(DeltaSettings)],
         [typeof(ComparisonTimeSettings)],
         [typeof(CurrentComparisonSettings)],
@@ -214,6 +217,7 @@ public class SettingsMust
     public void RaisePropertyChangedForEverySettableProperty(Type type)
     {
         var settings = type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
+        var settings = type == typeof(Subsplits::LiveSplit.UI.Components.SplitsSettings) ? new Subsplits::LiveSplit.UI.Components.SplitsSettings(TestSupport.CreateState()) : type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
         var raised = new List<string>();
         settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
@@ -225,6 +229,7 @@ public class SettingsMust
             }
 
             SplitsTests.PreparePropertyChange(settings, property.Name);
+            SubsplitsTests.PreparePropertyChange(settings, property.Name);
 
             raised.Clear();
             object current = property.GetValue(settings);
@@ -242,6 +247,7 @@ public class SettingsMust
     {
         Type t = property.PropertyType;
         if (property.Name is "GradientString" or "SplitGradientString")
+        if (property.Name is "GradientString" or "SplitGradientString" or "SubsplitGradientString" or "HeaderGradientString")
         {
             return (string)current == "Vertical" ? "Horizontal" : "Vertical";
         }

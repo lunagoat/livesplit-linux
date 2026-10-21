@@ -26,6 +26,7 @@
     <Project Path="../components/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
     <Project Path="../components/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
     <Project Path="../components/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />
+    <Project Path="../components/LiveSplit.Subsplits/src/LiveSplit.Subsplits/LiveSplit.Subsplits.csproj" />
     <Project Path="../components/LiveSplit.SumOfBest/src/LiveSplit.SumOfBest/LiveSplit.SumOfBest.csproj" />
     <Project Path="../components/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
     <Project Path="../components/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />

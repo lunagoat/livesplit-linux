@@ -15,6 +15,7 @@
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.TotalPlaytime/src/LiveSplit.TotalPlaytime/LiveSplit.TotalPlaytime.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.WorldRecord/src/LiveSplit.WorldRecord/LiveSplit.WorldRecord.csproj" />
     <ProjectReference Include="$(SrcPath)/LiveSplit.Core/LiveSplit.Core.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Subsplits/src/LiveSplit.Subsplits/LiveSplit.Subsplits.csproj" Aliases="Subsplits" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
