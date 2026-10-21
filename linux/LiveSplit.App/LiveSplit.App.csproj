@@ -35,9 +35,27 @@
   -->
   <ItemGroup Label="Components">
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Counter/src/LiveSplit.Counter/LiveSplit.Counter.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.CurrentComparison/src/LiveSplit.CurrentComparison/LiveSplit.CurrentComparison.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Delta/src/LiveSplit.Delta/LiveSplit.Delta.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.DetailedTimer/src/LiveSplit.DetailedTimer/LiveSplit.DetailedTimer.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Graph/src/LiveSplit.Graph/LiveSplit.Graph.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.HotkeyIndicator/src/LiveSplit.HotkeyIndicator/LiveSplit.HotkeyIndicator.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.ManualGameTime/src/LiveSplit.ManualGameTime/LiveSplit.ManualGameTime.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Sound/src/LiveSplit.Sound/LiveSplit.Sound.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Subsplits/src/LiveSplit.Subsplits/LiveSplit.Subsplits.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.SumOfBest/src/LiveSplit.SumOfBest/LiveSplit.SumOfBest.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.TotalPlaytime/src/LiveSplit.TotalPlaytime/LiveSplit.TotalPlaytime.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Video/src/LiveSplit.Video/LiveSplit.Video.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.WorldRecord/src/LiveSplit.WorldRecord/LiveSplit.WorldRecord.csproj" />
   </ItemGroup>
 
   <ItemGroup>
