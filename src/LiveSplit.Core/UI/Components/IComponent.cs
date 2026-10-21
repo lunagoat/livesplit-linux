@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
@@ -68,10 +67,10 @@ public interface IComponent : IDisposable
     void DrawVertical(Graphics g, LiveSplitState state, float width, Region clipRegion);
 
     /// <summary>
-    /// Shows a dialog where the user can configure the component.
+    /// Returns the object the UI layer uses to let the user configure the component.
     /// </summary>
-    /// <returns>Returns in what way the dialog was closed.</returns>
-    Control GetSettingsControl(LayoutMode mode);
+    /// <returns>A toolkit specific settings control, or the settings object itself.</returns>
+    object GetSettingsControl(LayoutMode mode);
 
     /// <summary>
     /// Returns the XML serialization of the component's settings.

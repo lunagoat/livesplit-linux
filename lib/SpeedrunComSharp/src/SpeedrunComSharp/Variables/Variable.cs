@@ -1,0 +1,132 @@
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+
+namespace SpeedrunComSharp;
+
+public class Variable : IElementWithID
+{
+    public string ID { get; private set; }
+    public string Name { get; private set; }
+    public VariableScope Scope { get; private set; }
+    public bool IsMandatory { get; private set; }
+    public bool IsUserDefined { get; private set; }
+    public bool IsUsedForObsoletingRuns { get; private set; }
+    public ReadOnlyCollection<VariableValue> Values { get; private set; }
+    public VariableValue DefaultValue { get; private set; }
+    public bool IsSubcategory { get; private set; }
+
+    #region Links
+
+    private Lazy<Game> game;
+    private Lazy<Category> category;
+    private Lazy<Level> level;
+
+    public string GameID { get; private set; }
+    public Game Game => game.Value;
+    public string CategoryID { get; private set; }
+    public Category Category => category.Value;
+    public Level Level => level.Value;
+
+    #endregion
+
+    private SpeedrunComClient client;
+
+    private Variable() { }
+
+    public VariableValue CreateCustomValue(string customValue)
+    {
+        if (!IsUserDefined)
+        {
+            throw new NotSupportedException("This variable doesn't support custom values.");
+        }
+
+        return VariableValue.CreateCustomValue(client, ID, customValue);
+    }
+
+    public static Variable Parse(SpeedrunComClient client, dynamic variableElement)
+    {
+        var variable = new Variable
+        {
+            client = client
+        };
+
+        var properties = variableElement.Properties as IDictionary<string, dynamic>;
+        var links = properties["links"] as IEnumerable<dynamic>;
+
+        //Parse Attributes
+
+        variable.ID = variableElement.id as string;
+        variable.Name = variableElement.name as string;
+        variable.Scope = VariableScope.Parse(client, variableElement.scope) as VariableScope;
+        variable.IsMandatory = (bool)(variableElement.mandatory ?? false);
+        variable.IsUserDefined = (bool)(properties["user-defined"] ?? false);
+        variable.IsUsedForObsoletingRuns = (bool)variableElement.obsoletes;
+
+        if (variableElement.values.choices is not ArrayList)
+        {
+            var choiceElements = variableElement.values.choices.Properties as IDictionary<string, dynamic>;
+            variable.Values = choiceElements.Select(x => VariableValue.ParseIDPair(client, variable, x)).ToList().AsReadOnly();
+        }
+        else
+        {
+            variable.Values = new ReadOnlyCollection<VariableValue>(new VariableValue[0]);
+        }
+
+        var valuesProperties = variableElement.values.Properties as IDictionary<string, dynamic>;
+        string defaultValue = valuesProperties["default"] as string;
+        if (!string.IsNullOrEmpty(defaultValue))
+        {
+            variable.DefaultValue = variable.Values.FirstOrDefault(x => x.ID == defaultValue);
+        }
+
+        variable.IsSubcategory = (bool)(properties["is-subcategory"] ?? false);
+
+        //Parse Links
+
+        dynamic gameLink = links.FirstOrDefault(x => x.rel == "game");
+        if (gameLink != null)
+        {
+            string gameUri = gameLink.uri as string;
+            variable.GameID = gameUri[(gameUri.LastIndexOf("/") + 1)..];
+            variable.game = new Lazy<Game>(() => client.Games.GetGame(variable.GameID));
+        }
+        else
+        {
+            variable.game = new Lazy<Game>(() => null);
+        }
+
+        variable.CategoryID = variableElement.category as string;
+        variable.category = !string.IsNullOrEmpty(variable.CategoryID)
+            ? new Lazy<Category>(() => client.Categories.GetCategory(variable.CategoryID))
+            : new Lazy<Category>(() => null);
+
+        variable.level = !string.IsNullOrEmpty(variable.Scope.LevelID)
+            ? new Lazy<Level>(() => client.Levels.GetLevel(variable.Scope.LevelID))
+            : new Lazy<Level>(() => null);
+
+        return variable;
+    }
+
+    public override int GetHashCode()
+    {
+        return (ID ?? string.Empty).GetHashCode();
+    }
+
+    public override bool Equals(object obj)
+    {
+        if (obj is not Variable other)
+        {
+            return false;
+        }
+
+        return ID == other.ID;
+    }
+
+    public override string ToString()
+    {
+        return Name;
+    }
+}

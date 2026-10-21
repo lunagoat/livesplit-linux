@@ -2,23 +2,20 @@
 
   <PropertyGroup>
     <RootNamespace>LiveSplit</RootNamespace>
-    <UseWindowsForms>true</UseWindowsForms>
-    <TargetFramework>net4.8.1</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <NoWarn>$(NoWarn);SYSLIB0014;SYSLIB0013;SYSLIB0011;CA1416;CS0618;NU1701</NoWarn>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="x86/livesplit_core.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="x64/livesplit_core.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RootPath)/linux/native/liblivesplit_core.so" Link="liblivesplit_core.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(RootPath)/linux/native/liblivesplit_core.so')" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="$(LibPath)/SpeedrunComSharp/src/SpeedrunComSharp/SpeedrunComSharp.csproj" />
-    <ProjectReference Include="$(SrcPath)/UpdateManager/UpdateManager.csproj" />
-    <ProjectReference Include="$(LibPath)/CustomFontDialog/CustomFontDialog/CustomFontDialog.csproj" />
-    <ProjectReference Include="$(LibPath)/WinForms Color Picker/WinFormsColor/WinFormsColor.csproj" />
+    <ProjectReference Include="$(RootPath)/linux/LiveSplit.Drawing/LiveSplit.Drawing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,20 +23,10 @@
     <PackageReference Include="GitInfo" Version="3.6.0" PrivateAssets="all" />
     <PackageReference Include="IrcDotNet" Version="0.7.0" />
     <PackageReference Include="PolySharp" Version="1.16.0" PrivateAssets="all" />
-    <PackageReference Include="SharpDX.DirectInput" Version="4.2.0" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="System.Formats.Nrbf" Version="10.0.8" />
     <PackageReference Include="System.Resources.Extensions" Version="10.0.8" />
-    <PackageReference Include="System.Text.Json" Version="10.0.8" />
     <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="System.Web" />
-    <Reference Include="System.Web.Extensions" />
-    <Reference Include="WindowsBase" />
   </ItemGroup>
 
   <Target Name="WriteGitInfo" DependsOnTargets="GitInfo" BeforeTargets="BeforeBuild">

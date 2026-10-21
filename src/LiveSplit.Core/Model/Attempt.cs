@@ -117,7 +117,7 @@ public struct Attempt
         TimeSpan? pauseTime = null;
         if (node.GetElementsByTagName("PauseTime").Count > 0)
         {
-            if (TimeSpan.TryParse(node["PauseTime"].InnerText, out TimeSpan x))
+            if (TimeSpan.TryParse(node["PauseTime"].InnerText, CultureInfo.InvariantCulture, out TimeSpan x))
             {
                 pauseTime = x;
             }

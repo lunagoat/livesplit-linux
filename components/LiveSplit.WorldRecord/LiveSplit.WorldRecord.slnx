@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LiveSplit.WorldRecord/LiveSplit.WorldRecord.csproj" />
+  </Folder>
+</Solution>

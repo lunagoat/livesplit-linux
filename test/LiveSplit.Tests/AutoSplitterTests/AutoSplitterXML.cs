@@ -10,6 +10,7 @@ using Xunit;
 
 namespace LiveSplit.Tests.AutoSplitterTests;
 
+[Collection("Environment")]
 public class AutoSplitterXML
 {
     [Fact]
@@ -58,7 +59,7 @@ public class AutoSplitterXML
             "WebAssembly Script is downloaded even though Type \"Component\" is specified");
         Assert.True(!autoSplitters.Values.Any(x => x.URLs.Any(y => y.EndsWith(".wasm")) && x.Type == AutoSplitterType.Script),
             "WebAssembly Script is downloaded even though ScriptType \"AutoSplittingRuntime\" is not specified");
-        Assert.True(!autoSplitters.Values.Any(x => x.URLs.Any(y => !Uri.IsWellFormedUriString(y, UriKind.Absolute))),
+        Assert.True(!autoSplitters.Values.Any(x => x.URLs.Any(y => !Uri.TryCreate(y, UriKind.Absolute, out Uri uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))),
             "Auto Splitters need to have valid URLs");
         Assert.True(!autoSplitters.Values.Any(x => x.URLs.Any(y => Regex.IsMatch(y, "https://github.com/[^/]*/[^/]*/blob/"))),
             "URLs leading to GitHub should use the raw file link");

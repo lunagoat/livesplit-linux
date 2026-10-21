@@ -1,5 +1,4 @@
 ﻿using LiveSplit.Options;
-using SharpDX.DirectInput;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -99,9 +98,9 @@ public class KeyOrButton
     }
 }
 
-public class CompositeHook
+public class CompositeHook : IDisposable
 {
-    protected LowLevelKeyboardHook KeyboardHook { get; set; }
+    protected KeyboardHook KeyboardHook { get; set; }
     protected GamepadHook GamepadHook { get; set; }
 
     public bool AllowGamepads
@@ -122,6 +121,7 @@ public class CompositeHook
     }
     private bool gamepadHookInitialized;
     private bool initializeEventCalled;
+    private volatile bool disposed;
 
     protected List<GamepadButton> RegisteredButtons { get; set; }
 
@@ -136,7 +136,7 @@ public class CompositeHook
 
     public CompositeHook(bool allowGamepads)
     {
-        KeyboardHook = new LowLevelKeyboardHook();
+        KeyboardHook = new KeyboardHook();
         RegisteredButtons = [];
         KeyboardHook.KeyPressed += KeyboardHook_KeyPressed;
 
@@ -145,9 +145,13 @@ public class CompositeHook
         AllowGamepads = allowGamepads;
     }
 
-    public Joystick GetMouse()
+    public bool IsKeyboardAvailable => KeyboardHook.IsAvailable;
+
+    public string KeyboardStatusMessage => KeyboardHook.StatusMessage;
+
+    public object GetMouse()
     {
-        return GamepadHook.GetMouse();
+        return GamepadHook?.GetMouse();
     }
 
     private void InitializeGamepadHook()
@@ -175,7 +179,7 @@ public class CompositeHook
 
             if (GamepadHook != null)
             {
-                while (true)
+                while (!disposed)
                 {
                     Thread.Sleep(25);
                     try
@@ -260,5 +264,13 @@ public class CompositeHook
     {
         RegisteredButtons.Clear();
         KeyboardHook.UnregisterAllHotkeys();
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+        KeyboardHook.KeyPressed -= KeyboardHook_KeyPressed;
+        KeyboardHook.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

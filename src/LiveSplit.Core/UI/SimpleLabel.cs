@@ -5,8 +5,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Linq;
-using System.Windows.Forms;
-using static System.Windows.Forms.TextRenderer;
 
 namespace LiveSplit.UI;
 
@@ -244,9 +242,16 @@ public class SimpleLabel
     // For longer strings, MeasureActualWidth should be used instead to keep digit spacing consistent
     private int MeasureCharacterActualWidth(string text, Graphics g)
     {
-        int width = MeasureText(g, text, Font, new Size((int)(Width + 0.5f), (int)(Height + 0.5f)), TextFormatFlags.NoPadding).Width;
-        
-		if (Font.Unit != GraphicsUnit.Point)
+        using var measureFormat = new StringFormat
+        {
+            Alignment = StringAlignment.Near,
+            LineAlignment = StringAlignment.Near,
+            FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip | StringFormatFlags.MeasureTrailingSpaces,
+            Trimming = StringTrimming.None
+        };
+        int width = (int)Math.Ceiling(g.MeasureString(text, Font, 9999, measureFormat).Width);
+
+        if (Font.Unit != GraphicsUnit.Point)
         {
             width = (int)((width * 96f / g.DpiY) + 0.5f);
         }

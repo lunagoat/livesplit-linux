@@ -1,14 +1,13 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using LiveSplit.TimeFormatters;
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Windows;
 
 namespace LiveSplit.Web.Share;
 
@@ -120,8 +119,8 @@ public class Imgur : IRunUploadPlatform
             dynamic result = UploadImage(image, titleBuilder.ToString(), comment);
 
             string url = "http://imgur.com/" + (string)result.data.id;
-            Process.Start(url);
-            Clipboard.SetText(url);
+            PlatformServices.OpenUrl(url);
+            PlatformServices.Current.SetClipboardText(url);
         }
 
         return true;

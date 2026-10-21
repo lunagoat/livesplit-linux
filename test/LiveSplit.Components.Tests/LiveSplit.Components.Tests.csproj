@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);SYSLIB0014;CA1416;CS0618;NU1701</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcPath)/LiveSplit.Core/LiveSplit.Core.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The layout the Windows version ships, as a real-world settings sample. -->
+    <None Include="$(SrcPath)/LiveSplit.View/Resources/DefaultLayout.lsl" Link="Samples/DefaultLayout.lsl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PolySharp" Version="1.16.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

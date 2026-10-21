@@ -1,0 +1,19 @@
+# IDE options/cache
+.idea/*
+.vs/*
+.vscode/*
+.zed/*
+
+*.lscache
+
+# Build artifacts
+artifacts/
+bin/
+obj/
+publish/
+
+# User-specific files
+*.user
+
+# MSBuild
+*.binlog

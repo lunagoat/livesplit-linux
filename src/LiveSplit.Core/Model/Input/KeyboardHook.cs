@@ -1,76 +1,82 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
+﻿using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 
 namespace LiveSplit.Model.Input;
 
-public class KeyboardHook
+public class KeyboardHook : IDisposable
 {
-    protected Dictionary<Keys, bool> RegisteredKeys { get; set; }
+    private readonly object registeredKeysLock = new();
+    private bool disposed;
+
+    protected HashSet<Keys> RegisteredKeys { get; set; }
+    protected IKeyboardBackend Backend { get; }
     public event KeyEventHandler KeyPressed;
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
-    public static extern short GetAsyncKeyState(Keys vkey);
-
     public KeyboardHook()
+        : this(KeyboardBackends.Shared)
+    {
+    }
+
+    public KeyboardHook(IKeyboardBackend backend)
     {
         RegisteredKeys = [];
+        Backend = backend;
+        Backend.KeyDown += Backend_KeyDown;
     }
+
+    public bool IsAvailable => Backend.IsAvailable;
+
+    public string StatusMessage => Backend.StatusMessage;
 
     public void RegisterHotKey(Keys key)
     {
-        if (!RegisteredKeys.ContainsKey(key))
+        lock (registeredKeysLock)
         {
-            RegisteredKeys.Add(key, false);
+            RegisteredKeys.Add(key);
         }
     }
 
     public void UnregisterAllHotkeys()
     {
-        RegisteredKeys.Clear();
+        lock (registeredKeysLock)
+        {
+            RegisteredKeys.Clear();
+        }
     }
 
     public void Poll()
     {
-        foreach (KeyValuePair<Keys, bool> keyPair in RegisteredKeys.ToList())
-        {
-            Keys key = keyPair.Key;
-            bool modifiersDown = true;
-            Keys modifiers = Keys.None;
-            if (key.HasFlag(Keys.Shift))
-            {
-                modifiersDown &= IsKeyDown(Keys.ShiftKey);
-                modifiers |= Keys.Shift;
-            }
-
-            if (key.HasFlag(Keys.Control))
-            {
-                modifiersDown &= IsKeyDown(Keys.ControlKey);
-                modifiers |= Keys.Control;
-            }
-
-            if (key.HasFlag(Keys.Alt))
-            {
-                modifiersDown &= IsKeyDown(Keys.Menu);
-                modifiers |= Keys.Alt;
-            }
-
-            Keys keyWithoutModifiers = key & ~modifiers;
-            bool isPressed = IsKeyDown(keyWithoutModifiers);
-            bool wasPressedBefore = keyPair.Value;
-            RegisteredKeys[key] = isPressed;
-
-            if (modifiersDown && isPressed && !wasPressedBefore)
-            {
-                KeyPressed?.Invoke(this, new KeyEventArgs(key));
-            }
-        }
+        Backend.Poll();
     }
 
     protected bool IsKeyDown(Keys key)
     {
-        short result = GetAsyncKeyState(key);
-        return ((result >> 15) & 1) == 1;
+        return Backend.IsKeyDown(key);
+    }
+
+    private void Backend_KeyDown(object sender, KeyEventArgs e)
+    {
+        bool registered;
+        lock (registeredKeysLock)
+        {
+            registered = RegisteredKeys.Contains(e.KeyData);
+        }
+
+        if (registered)
+        {
+            KeyPressed?.Invoke(this, e);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (!disposed)
+        {
+            disposed = true;
+            Backend.KeyDown -= Backend_KeyDown;
+        }
+
+        GC.SuppressFinalize(this);
     }
 }

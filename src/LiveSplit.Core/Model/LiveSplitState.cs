@@ -2,7 +2,6 @@
 using LiveSplit.Options;
 using LiveSplit.UI;
 using System;
-using Forms = System.Windows.Forms;
 
 namespace LiveSplit.Model;
 
@@ -12,7 +11,7 @@ public class LiveSplitState : ICloneable
     public ILayout Layout { get; set; }
     public LayoutSettings LayoutSettings { get; set; }
     public ISettings Settings { get; set; }
-    public Forms.Form Form { get; set; }
+    public IFormHost Form { get; set; }
 
     public AtomicDateTime AttemptStarted { get; set; }
     public AtomicDateTime AttemptEnded { get; set; }
@@ -146,7 +145,7 @@ public class LiveSplitState : ICloneable
 
     private LiveSplitState() { }
 
-    public LiveSplitState(IRun run, Forms.Form form, ILayout layout, LayoutSettings layoutSettings, ISettings settings)
+    public LiveSplitState(IRun run, IFormHost form, ILayout layout, LayoutSettings layoutSettings, ISettings settings)
     {
         Run = run;
         Form = form;

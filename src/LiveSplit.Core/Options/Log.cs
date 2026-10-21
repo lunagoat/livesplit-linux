@@ -1,30 +1,69 @@
-﻿using System;
+﻿using LiveSplit.Hosting;
+using System;
 using System.Diagnostics;
+using System.IO;
 
 namespace LiveSplit.Options;
 
 public static class Log
 {
+    private static readonly object SyncRoot = new();
+    private const long MaxLogSize = 1024 * 1024;
+
     static Log()
     {
         try
         {
-            if (!EventLog.SourceExists("LiveSplit"))
-            {
-                EventLog.CreateEventSource("LiveSplit", "Application");
-            }
-        }
-        catch { }
-
-        try
-        {
-            var listener = new EventLogTraceListener("LiveSplit")
+            Trace.Listeners.Add(new LogFileTraceListener()
             {
                 Filter = new EventTypeFilter(SourceLevels.Warning)
-            };
-            Trace.Listeners.Add(listener);
+            });
         }
         catch { }
+    }
+
+    public static string LogFilePath => Path.Combine(Paths.LogDirectory, "LiveSplit.log");
+
+    private sealed class LogFileTraceListener : TraceListener
+    {
+        public override void Write(string message)
+        {
+            WriteLine(message);
+        }
+
+        public override void WriteLine(string message)
+        {
+            Append(message);
+        }
+
+        public override void TraceEvent(TraceEventCache eventCache, string source, TraceEventType eventType, int id, string message)
+        {
+            Append($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{eventType}] {message}");
+        }
+
+        public override void TraceEvent(TraceEventCache eventCache, string source, TraceEventType eventType, int id, string format, params object[] args)
+        {
+            Append($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{eventType}] {string.Format(format, args)}");
+        }
+
+        private static void Append(string text)
+        {
+            try
+            {
+                lock (SyncRoot)
+                {
+                    string path = LogFilePath;
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    if (File.Exists(path) && new FileInfo(path).Length > MaxLogSize)
+                    {
+                        File.Move(path, path + ".old", true);
+                    }
+
+                    File.AppendAllText(path, text + Environment.NewLine);
+                }
+            }
+            catch { }
+        }
     }
 
     public static void Error(Exception ex)

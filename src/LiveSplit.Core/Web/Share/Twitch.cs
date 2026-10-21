@@ -1,5 +1,6 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -229,15 +230,33 @@ public class Twitch : IRunUploadPlatform
             {
                 try
                 {
-                    var dialog = new TwitchGameResolveDialog(run.GameName);
-                    DialogResult result = dialog.ShowDialog();
+                    List<TwitchGame> suggestions = [];
+                    DialogResult result = PlatformServices.Current.ChooseFromSearch(
+                        null,
+                        "Resolve Twitch Game",
+                        "The game could not be found on Twitch. Search for the correct game or choose no game:",
+                        run.GameName,
+                        query =>
+                        {
+                            try
+                            {
+                                suggestions = [.. FindGame(query)];
+                            }
+                            catch
+                            {
+                                suggestions = [];
+                            }
+
+                            return suggestions.Select(x => x.Name).ToList();
+                        },
+                        out int selectedIndex);
                     if (result != DialogResult.OK)
                     {
                         return false;
                     }
-                    else if (dialog.Game != null)
+                    else if (selectedIndex >= 0 && selectedIndex < suggestions.Count)
                     {
-                        game = dialog.Game;
+                        game = suggestions[selectedIndex];
                     }
 
                     resolved = true;

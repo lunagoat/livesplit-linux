@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -155,7 +154,7 @@ public class InfoTextComponent : IComponent
 
     public string ComponentName => throw new NotSupportedException();
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotImplementedException();
     }

@@ -1,0 +1,60 @@
+// Verbatim copy of LiveSplit.Core/UI/ImageExtensions.cs (taken from the Windows code base) - used to prove the shim compiles and runs it unchanged.
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+
+namespace LiveSplit.UI;
+
+public static class ImageExtensions
+{
+    public static Image ScaleIcon(this Image image)
+    {
+        return image.Scale(96);
+    }
+
+    public static Image Scale(this Image image, int maxDim)
+    {
+        if (image == null)
+        {
+            return null;
+        }
+
+        int width = image.Width;
+        int height = image.Height;
+        if (width <= maxDim && height <= maxDim)
+        {
+            return image;
+        }
+
+        using (image)
+        {
+            if (width > height)
+            {
+                height = maxDim * height / width;
+                width = maxDim;
+            }
+            else
+            {
+                width = maxDim * width / height;
+                height = maxDim;
+            }
+
+            var bitmap = new Bitmap(width, height, image.PixelFormat);
+
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                var attributes = new ImageAttributes();
+
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.DrawImage(
+                    image,
+                    new Rectangle(0, 0, width, height),
+                    0, 0, image.Width, image.Height,
+                    GraphicsUnit.Pixel,
+                    attributes);
+            }
+
+            return bitmap;
+        }
+    }
+}

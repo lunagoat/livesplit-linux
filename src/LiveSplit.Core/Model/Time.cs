@@ -1,5 +1,6 @@
 ﻿using LiveSplit.Web;
 using System;
+using System.Globalization;
 using System.Xml;
 
 namespace LiveSplit.Model;
@@ -53,7 +54,7 @@ public struct Time
         TimeSpan x;
         if (element.GetElementsByTagName("RealTime").Count > 0)
         {
-            if (TimeSpan.TryParse(element["RealTime"].InnerText, out x))
+            if (TimeSpan.TryParse(element["RealTime"].InnerText, CultureInfo.InvariantCulture, out x))
             {
                 newTime.RealTime = x;
             }
@@ -61,7 +62,7 @@ public struct Time
 
         if (element.GetElementsByTagName("GameTime").Count > 0)
         {
-            if (TimeSpan.TryParse(element["GameTime"].InnerText, out x))
+            if (TimeSpan.TryParse(element["GameTime"].InnerText, CultureInfo.InvariantCulture, out x))
             {
                 newTime.GameTime = x;
             }
@@ -103,12 +104,12 @@ public struct Time
         string[] splits = text.Split('|');
         var newTime = new Time
         {
-            RealTime = TimeSpan.TryParse(splits[0].TrimEnd(), out TimeSpan x) ? x : null
+            RealTime = TimeSpan.TryParse(splits[0].TrimEnd(), CultureInfo.InvariantCulture, out TimeSpan x) ? x : null
         };
 
         if (splits.Length > 1)
         {
-            newTime.GameTime = TimeSpan.TryParse(splits[1].TrimStart(), out x) ? x : null;
+            newTime.GameTime = TimeSpan.TryParse(splits[1].TrimStart(), CultureInfo.InvariantCulture, out x) ? x : null;
         }
 
         return newTime;

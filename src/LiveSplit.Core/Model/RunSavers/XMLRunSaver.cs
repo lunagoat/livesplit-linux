@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Xml;
 
 using static LiveSplit.UI.SettingsHelper;
@@ -74,8 +73,6 @@ public class XMLRunSaver : IRunSaver
 
         XmlElement segmentElement = document.CreateElement("Segments");
         parent.AppendChild(segmentElement);
-
-        var bf = new BinaryFormatter();
 
         foreach (ISegment segment in run)
         {

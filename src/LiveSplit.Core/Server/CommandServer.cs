@@ -1,6 +1,8 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
+using LiveSplit.Hosting;
 using LiveSplit.TimeFormatters;
+using LiveSplit.UI;
 using LiveSplit.Updates;
 using System;
 using System.Collections.Generic;
@@ -8,14 +10,12 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
-using System.IO.Pipes;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Windows.Forms;
 using WebSocketSharp.Server;
 
 namespace LiveSplit.Server;
@@ -29,7 +29,7 @@ public class CommandServer
     public ServerStateType ServerState { get; protected set; } = ServerStateType.Off;
 
     protected LiveSplitState State { get; set; }
-    protected Form Form { get; set; }
+    protected IFormHost Form { get; set; }
     protected TimerModel Model { get; set; }
     protected ITimeFormatter TimeFormatter { get; set; }
     protected Action RefreshHotkeyHooks { get; set; }
@@ -38,7 +38,9 @@ public class CommandServer
     protected Func<bool, bool, bool> SaveSplits { get; set; }
     protected Func<string, bool, bool> OpenLayoutFromFile { get; set; }
     protected Func<string, bool, bool> OpenRunFromFile { get; set; }
-    protected NamedPipeServerStream WaitingServerPipe { get; set; }
+    protected Socket UnixServer { get; set; }
+
+    public string UnixSocketPath { get; protected set; }
 
     protected bool AlwaysPauseGameTime { get; set; }
     private static readonly JsonSerializerOptions _serializerOptions = new()
@@ -87,8 +89,25 @@ public class CommandServer
     public void StartNamedPipe()
     {
         StopPipe();
-        WaitingServerPipe = CreateServerPipe();
-        WaitingServerPipe.BeginWaitForConnection(AcceptPipeClient, null);
+
+        string path = Paths.CommandSocketPath;
+        try
+        {
+            File.Delete(path);
+        }
+        catch { }
+
+        UnixServer = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        UnixServer.Bind(new UnixDomainSocketEndPoint(path));
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        UnixServer.Listen(16);
+        UnixSocketPath = path;
+        UnixServer.BeginAccept(AcceptPipeClient, UnixServer);
+    }
+
+    public void StartUnixSocket()
+    {
+        StartNamedPipe();
     }
 
     public void StopAll()
@@ -101,7 +120,7 @@ public class CommandServer
 
     public void StopTcp()
     {
-        foreach (TcpConnection connection in TcpConnections)
+        foreach (TcpConnection connection in TcpConnections.ToList())
         {
             connection.Dispose();
         }
@@ -125,9 +144,21 @@ public class CommandServer
 
     public void StopPipe()
     {
-        WaitingServerPipe?.Dispose();
+        UnixServer?.Dispose();
+        UnixServer = null;
 
-        foreach (Connection connection in PipeConnections)
+        if (UnixSocketPath != null)
+        {
+            try
+            {
+                File.Delete(UnixSocketPath);
+            }
+            catch { }
+
+            UnixSocketPath = null;
+        }
+
+        foreach (Connection connection in PipeConnections.ToList())
         {
             connection.Dispose();
         }
@@ -154,14 +185,14 @@ public class CommandServer
     {
         try
         {
-            WaitingServerPipe.EndWaitForConnection(result);
-            var connection = new Connection(WaitingServerPipe);
+            var server = (Socket)result.AsyncState;
+            Socket client = server.EndAccept(result);
+            var connection = new Connection(new NetworkStream(client, true));
             connection.MessageReceived += connection_MessageReceived;
             connection.Disconnected += pipeConnection_Disconnected;
             PipeConnections.Add(connection);
 
-            WaitingServerPipe = CreateServerPipe();
-            WaitingServerPipe.BeginWaitForConnection(AcceptPipeClient, null);
+            server.BeginAccept(AcceptPipeClient, server);
         }
         catch { }
     }
@@ -173,12 +204,6 @@ public class CommandServer
         connection.Disconnected -= pipeConnection_Disconnected;
         PipeConnections.Remove(connection);
         connection.Dispose();
-    }
-
-    private NamedPipeServerStream CreateServerPipe()
-    {
-        var pipe = new NamedPipeServerStream("LiveSplit", PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-        return pipe;
     }
 
     private TimeSpan? ParseTime(string timeString)
@@ -866,7 +891,7 @@ public class CommandServer
             }
             case "getlivesplitpath":
             {
-                response = Assembly.GetEntryAssembly().Location.ToString();
+                response = !string.IsNullOrEmpty(Assembly.GetEntryAssembly()?.Location) ? Assembly.GetEntryAssembly().Location : Environment.ProcessPath ?? "-";
                 break;
             }
             case "getservertype":
@@ -943,7 +968,6 @@ public class CommandServer
     {
         State.OnStart -= State_OnStart;
         StopAll();
-        WaitingServerPipe.Dispose();
     }
 }
 file sealed record CategoryMetadata(

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.Options;
@@ -14,17 +13,11 @@ public abstract class RaceProviderSettings : ICloneable
 
     public abstract object Clone();
 
-    public virtual Control GetSettingsControl()
+    public virtual string SettingsMessage => "There are no options available for this racing service.";
+
+    public virtual object GetSettingsControl()
     {
-        var control = new UserControl();
-        control.Controls.Add(new Label()
-        {
-            Text = "There are no options available for this racing service.",
-            Dock = DockStyle.Fill,
-            TextAlign = System.Drawing.ContentAlignment.TopCenter
-        });
-        control.Dock = DockStyle.Fill;
-        return control;
+        return null;
     }
 
     public virtual void FromXml(XmlElement element, Version version)
@@ -72,19 +65,7 @@ public class UnloadedRaceProviderSettings : RaceProviderSettings
         };
     }
 
-    public override Control GetSettingsControl()
-    {
-        var control = new UserControl();
-        control.Controls.Add(new Label()
-        {
-            Text = "Plugin could not be loaded",
-            Dock = DockStyle.Fill,
-            ForeColor = System.Drawing.Color.Red,
-            TextAlign = System.Drawing.ContentAlignment.TopCenter
-        });
-        control.Dock = DockStyle.Fill;
-        return control;
-    }
+    public override string SettingsMessage => "Plugin could not be loaded";
 
     public override void FromXml(XmlElement element, Version version)
     {

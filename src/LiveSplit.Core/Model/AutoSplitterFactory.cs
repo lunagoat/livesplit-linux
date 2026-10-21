@@ -1,4 +1,5 @@
 ﻿using LiveSplit.Options;
+using LiveSplit.Hosting;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +16,8 @@ public class AutoSplitterFactory
 
     public const string AutoSplittersXmlUrl = "https://raw.githubusercontent.com/LiveSplit/LiveSplit.AutoSplitters/master/LiveSplit.AutoSplitters.xml";
     public const string AutoSplittersXmlFile = "LiveSplit.AutoSplitters.xml";
+
+    public static string AutoSplittersXmlPath => Path.Combine(Paths.CacheDirectory, AutoSplittersXmlFile);
 
     static AutoSplitterFactory()
     {
@@ -118,14 +121,15 @@ public class AutoSplitterFactory
         try
         {
             autoSplitters.Load(AutoSplittersXmlUrl);
-            autoSplitters.Save(AutoSplittersXmlFile);
+            Directory.CreateDirectory(Paths.CacheDirectory);
+            autoSplitters.Save(AutoSplittersXmlPath);
         }
         catch (Exception ex)
         {
             Log.Error(ex);
-            if (File.Exists(AutoSplittersXmlFile))
+            if (File.Exists(AutoSplittersXmlPath))
             {
-                autoSplitters.Load(AutoSplittersXmlFile);
+                autoSplitters.Load(AutoSplittersXmlPath);
             }
             else
             {

@@ -1,39 +1,16 @@
-﻿using Fetze.WinFormsColor;
-using System;
+﻿using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI;
 
 public class SettingsHelper
 {
-    public static CustomFontDialog.FontDialog GetFontDialog(Font previousFont, int minSize, int maxSize)
-    {
-        var dialog = new CustomFontDialog.FontDialog
-        {
-            OriginalFont = previousFont,
-            MinSize = minSize,
-            MaxSize = maxSize
-        };
-        return dialog;
-    }
-
     public static string FormatFont(Font font)
     {
         return $"{font.FontFamily.Name} {font.Style}";
-    }
-
-    public static void ColorButtonClick(Button button, Control control)
-    {
-        var picker = new ColorPickerDialog();
-        picker.SelectedColorChanged += (s, x) => button.BackColor = picker.SelectedColor;
-        picker.SelectedColor = picker.OldColor = button.BackColor;
-        picker.ShowDialog(control);
-        button.BackColor = picker.SelectedColor;
     }
 
     public static Color ParseColor(XmlElement colorElement, Color defaultColor = default)
@@ -47,12 +24,8 @@ public class SettingsHelper
     {
         if (element != null && !element.IsEmpty)
         {
-            var bf = new BinaryFormatter();
-
-            string base64String = element.InnerText;
-            byte[] data = Convert.FromBase64String(base64String);
-            var ms = new MemoryStream(data);
-            return (Font)bf.Deserialize(ms);
+            byte[] data = Convert.FromBase64String(element.InnerText);
+            return DrawingSerialization.DeserializeFont(data);
         }
 
         return null;
@@ -66,11 +39,7 @@ public class SettingsHelper
 
             if (font != null)
             {
-                using var ms = new MemoryStream();
-                var bf = new BinaryFormatter();
-
-                bf.Serialize(ms, font);
-                byte[] data = ms.ToArray();
+                byte[] data = DrawingSerialization.SerializeFont(font);
                 XmlCDataSection cdata = document.CreateCDataSection(Convert.ToBase64String(data));
                 element.InnerXml = cdata.OuterXml;
             }
@@ -103,11 +72,7 @@ public class SettingsHelper
 
             if (image != null)
             {
-                using var ms = new MemoryStream();
-                var bf = new BinaryFormatter();
-
-                bf.Serialize(ms, image);
-                byte[] data = ms.ToArray();
+                byte[] data = DrawingSerialization.SerializeImage(image);
                 XmlCDataSection cdata = document.CreateCDataSection(Convert.ToBase64String(data));
                 element.InnerXml = cdata.OuterXml;
             }
@@ -122,13 +87,8 @@ public class SettingsHelper
     {
         if (element != null && !element.IsEmpty)
         {
-            var bf = new BinaryFormatter();
-
-            string base64String = element.InnerText;
-            byte[] data = Convert.FromBase64String(base64String);
-
-            using var ms = new MemoryStream(data);
-            return (Image)bf.Deserialize(ms);
+            byte[] data = Convert.FromBase64String(element.InnerText);
+            return DrawingSerialization.DeserializeImage(data);
         }
 
         return null;
@@ -179,7 +139,7 @@ public class SettingsHelper
 
     public static bool TryParseFloat(XmlElement floatElement, out float result, float defaultFloat = 0f)
     {
-        if (floatElement != null && float.TryParse(floatElement.InnerText, out result))
+        if (floatElement != null && float.TryParse(floatElement.InnerText.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out result))
         {
             return true;
         }
@@ -197,7 +157,7 @@ public class SettingsHelper
 
     public static bool TryParseDouble(XmlElement doubleElement, out double result, double defaultDouble = 0.0)
     {
-        if (doubleElement != null && double.TryParse(doubleElement.InnerText, out result))
+        if (doubleElement != null && double.TryParse(doubleElement.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out result))
         {
             return true;
         }
@@ -218,14 +178,14 @@ public class SettingsHelper
     public static TimeSpan ParseTimeSpan(XmlElement timeSpanElement, TimeSpan defaultTimeSpan = default)
     {
         return timeSpanElement != null
-            ? TimeSpan.Parse(timeSpanElement.InnerText)
+            ? TimeSpan.Parse(timeSpanElement.InnerText, CultureInfo.InvariantCulture)
             : defaultTimeSpan;
     }
 
     public static bool TryParseTimeSpan(XmlElement timeSpanElement, out TimeSpan result,
         TimeSpan defaultTimeSpan = default)
     {
-        if (timeSpanElement != null && TimeSpan.TryParse(timeSpanElement.InnerText, out result))
+        if (timeSpanElement != null && TimeSpan.TryParse(timeSpanElement.InnerText, CultureInfo.InvariantCulture, out result))
         {
             return true;
         }

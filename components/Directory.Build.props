@@ -9,4 +9,16 @@
     <OutputPath>$(BuildPath)/Components</OutputPath>
   </PropertyGroup>
 
+  <!--
+    Linux port: components are loaded into the host's default AssemblyLoadContext, which already contains
+    LiveSplit.Core and its dependencies. Do not copy host assemblies (they flow in transitively through the
+    Core project reference even with Private=false) into the Components folder.
+  -->
+  <Target Name="ExcludeHostAssembliesFromOutput" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)"
+        Condition="'%(Filename)' == 'LiveSplit.Core' Or '%(Filename)' == 'LiveSplit.Drawing' Or '%(Filename)' == 'SpeedrunComSharp'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

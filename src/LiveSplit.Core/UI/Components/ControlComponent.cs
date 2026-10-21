@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -10,13 +9,17 @@ public abstract class ControlComponent : IDeactivatableComponent
 {
     public abstract string ComponentName { get; }
 
-    protected Form Form { get; set; }
-    protected Control Control { get; set; }
+    protected IFormHost Form { get; set; }
+    protected object Control { get; set; }
 
     public bool Activated
     {
-        get => Control.Visible;
-        set => Control.Visible = activated = value;
+        get => Form?.GetControlVisible(Control) ?? activated;
+        set
+        {
+            activated = value;
+            Form?.SetControlVisible(Control, value);
+        }
     }
     protected bool activated;
 
@@ -38,12 +41,12 @@ public abstract class ControlComponent : IDeactivatableComponent
 
     public IDictionary<string, Action> ContextMenuControls { get; protected set; }
 
-    protected ControlComponent(LiveSplitState state, Control control, Action<Exception> errorCallback = null)
+    protected ControlComponent(LiveSplitState state, object control, Action<Exception> errorCallback = null)
     {
         ErrorCallback = errorCallback;
         Form = state.Form;
         Control = control;
-        activated = control.Visible;
+        activated = Form?.GetControlVisible(control) ?? true;
     }
 
     public void InvokeIfNeeded(Action x)
@@ -71,8 +74,11 @@ public abstract class ControlComponent : IDeactivatableComponent
         {
             lock (Control)
             {
-                Control.Location = new Point((int)(points[0].X + 0.5f) + 1, (int)(points[0].Y + 0.5f) + 1);
-                Control.Size = new Size((int)(points[1].X - points[0].X + 0.5f) - 2, (int)(points[1].Y - points[0].Y + 0.5f) - 2);
+                Form?.SetControlBounds(Control, new Rectangle(
+                    (int)(points[0].X + 0.5f) + 1,
+                    (int)(points[0].Y + 0.5f) + 1,
+                    (int)(points[1].X - points[0].X + 0.5f) - 2,
+                    (int)(points[1].Y - points[0].Y + 0.5f) - 2));
             }
         });
     }
@@ -84,9 +90,7 @@ public abstract class ControlComponent : IDeactivatableComponent
             AddedToForm = true;
             try
             {
-                Form.SuspendLayout();
-                Form.Controls.Add(Control);
-                Form.ResumeLayout(false);
+                Form.AddControl(Control);
             }
             catch (Exception ex)
             {
@@ -108,7 +112,7 @@ public abstract class ControlComponent : IDeactivatableComponent
         Reposition(width, VerticalHeight, g);
     }
 
-    public abstract Control GetSettingsControl(LayoutMode mode);
+    public abstract object GetSettingsControl(LayoutMode mode);
 
     public abstract System.Xml.XmlNode GetSettings(System.Xml.XmlDocument document);
 
@@ -125,8 +129,8 @@ public abstract class ControlComponent : IDeactivatableComponent
 
     public virtual void Dispose()
     {
-        Form.Controls.Remove(Control);
-        Control.Dispose();
+        Form?.RemoveControl(Control);
+        (Control as IDisposable)?.Dispose();
 
         GC.SuppressFinalize(this);
     }

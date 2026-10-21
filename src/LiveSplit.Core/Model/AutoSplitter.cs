@@ -1,4 +1,5 @@
 ﻿using LiveSplit.Options;
+using LiveSplit.Hosting;
 using LiveSplit.UI.Components;
 using System;
 using System.Collections.Generic;
@@ -26,7 +27,7 @@ public class AutoSplitter : ICloneable
     public IEnumerable<string> Games { get; set; }
     public bool IsActivated => Component != null;
     public List<string> URLs { get; set; }
-    public string LocalPath => Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? "", ComponentManager.PATH_COMPONENTS, FileName));
+    public string LocalPath => Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? Paths.ExecutableDirectory, ComponentManager.PATH_COMPONENTS, FileName));
     public string FileName => URLs[0][(URLs[0].LastIndexOf('/') + 1)..];
     public AutoSplitterType Type { get; set; }
     public bool ShowInLayoutEditor { get; set; }
@@ -66,7 +67,7 @@ public class AutoSplitter : ICloneable
             catch (Exception ex)
             {
                 Log.Error(ex);
-                MessageBox.Show(state.Form, "The Auto Splitter could not be activated. (" + ex.Message + ")", "Activation Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                PlatformServices.Current.ShowMessage(state.Form, "The Auto Splitter could not be activated. (" + ex.Message + ")", "Activation Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
@@ -79,8 +80,8 @@ public class AutoSplitter : ICloneable
         {
             string fileName = url[(url.LastIndexOf('/') + 1)..];
             string tempFileName = fileName + "-temp";
-            string localPath = Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? "", ComponentManager.PATH_COMPONENTS, fileName));
-            string tempLocalPath = Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? "", ComponentManager.PATH_COMPONENTS, tempFileName));
+            string localPath = Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? Paths.ExecutableDirectory, ComponentManager.PATH_COMPONENTS, fileName));
+            string tempLocalPath = Path.GetFullPath(Path.Combine(ComponentManager.BasePath ?? Paths.ExecutableDirectory, ComponentManager.PATH_COMPONENTS, tempFileName));
 
             try
             {

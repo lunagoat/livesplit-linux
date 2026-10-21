@@ -1,0 +1,200 @@
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Linq;
+
+namespace SpeedrunComSharp;
+
+public class Run : IElementWithID
+{
+    public string ID { get; private set; }
+    public Uri WebLink { get; private set; }
+    public string GameID { get; private set; }
+    public string LevelID { get; private set; }
+    public string CategoryID { get; private set; }
+    public RunVideos Videos { get; private set; }
+    public string Comment { get; private set; }
+    public RunStatus Status { get; private set; }
+    public Player Player => Players.FirstOrDefault();
+    public ReadOnlyCollection<Player> Players { get; internal set; }
+    public DateTime? Date { get; private set; }
+    public DateTime? DateSubmitted { get; private set; }
+    public RunTimes Times { get; private set; }
+    public RunSystem System { get; private set; }
+    public Uri SplitsUri { get; private set; }
+    public bool SplitsAvailable => SplitsUri != null;
+    public ReadOnlyCollection<VariableValue> VariableValues { get; private set; }
+
+    #region Links
+
+    internal Lazy<Game> game;
+    internal Lazy<Category> category;
+    private Lazy<Level> level;
+    private Lazy<User> examiner;
+
+    public Game Game => game.Value;
+    public Category Category => category.Value;
+    public Level Level => level.Value;
+    public Platform Platform => System.Platform;
+    public Region Region => System.Region;
+    public User Examiner => examiner.Value;
+
+    #endregion
+
+    protected Run() { }
+
+    internal static void Parse(Run run, SpeedrunComClient client, dynamic runElement)
+    {
+        //Parse Attributes
+
+        run.ID = runElement.id as string;
+        run.WebLink = new Uri(runElement.weblink as string);
+        run.Videos = RunVideos.Parse(client, runElement.videos) as RunVideos;
+        run.Comment = runElement.comment as string;
+        run.Status = RunStatus.Parse(client, runElement.status) as RunStatus;
+
+        Player parsePlayer(dynamic x)
+        {
+            return Player.Parse(client, x) as Player;
+        }
+
+        run.Players = runElement.players switch
+        {
+            IEnumerable<dynamic> players => client.ParseCollection(players, parsePlayer),
+            ArrayList { Count: 0 } arrayList => new List<Player>().AsReadOnly(),
+            _ => client.ParseCollection(runElement.players.data, (Func<dynamic, Player>)parsePlayer)
+        };
+
+        dynamic runDate = runElement.date;
+        if (!string.IsNullOrEmpty(runDate))
+        {
+            run.Date = DateTime.Parse(runDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        }
+
+        dynamic dateSubmitted = runElement.submitted;
+        if (!string.IsNullOrEmpty(dateSubmitted))
+        {
+            run.DateSubmitted = DateTime.Parse(dateSubmitted, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+        }
+
+        run.Times = RunTimes.Parse(client, runElement.times) as RunTimes;
+        run.System = RunSystem.Parse(client, runElement.system) as RunSystem;
+
+        dynamic splits = runElement.splits;
+        if (splits != null)
+        {
+            run.SplitsUri = new Uri(splits.uri as string);
+        }
+
+        if (runElement.values is DynamicJsonObject)
+        {
+            var valueProperties = runElement.values.Properties as IDictionary<string, dynamic>;
+            run.VariableValues = valueProperties.Select(x => VariableValue.ParseValueDescriptor(client, x)).ToList().AsReadOnly();
+        }
+        else
+        {
+            run.VariableValues = new List<VariableValue>().AsReadOnly();
+        }
+
+        //Parse Links
+
+        var properties = runElement.Properties as IDictionary<string, dynamic>;
+
+        if (properties["game"] is string)
+        {
+            run.GameID = runElement.game as string;
+            run.game = new Lazy<Game>(() => client.Games.GetGame(run.GameID));
+        }
+        else
+        {
+            var game = Game.Parse(client, properties["game"].data) as Game;
+            run.game = new Lazy<Game>(() => game);
+            run.GameID = game.ID;
+        }
+
+        if (properties["category"] == null)
+        {
+            run.category = new Lazy<Category>(() => null);
+        }
+        else if (properties["category"] is string)
+        {
+            run.CategoryID = runElement.category as string;
+            run.category = new Lazy<Category>(() => client.Categories.GetCategory(run.CategoryID));
+        }
+        else
+        {
+            var category = Category.Parse(client, properties["category"].data) as Category;
+            run.category = new Lazy<Category>(() => category);
+            if (category != null)
+            {
+                run.CategoryID = category.ID;
+            }
+        }
+
+        if (properties["level"] == null)
+        {
+            run.level = new Lazy<Level>(() => null);
+        }
+        else if (properties["level"] is string)
+        {
+            run.LevelID = runElement.level as string;
+            run.level = new Lazy<Level>(() => client.Levels.GetLevel(run.LevelID));
+        }
+        else
+        {
+            var level = Level.Parse(client, properties["level"].data) as Level;
+            run.level = new Lazy<Level>(() => level);
+            if (level != null)
+            {
+                run.LevelID = level.ID;
+            }
+        }
+
+        if (properties.ContainsKey("platform"))
+        {
+            var platform = Platform.Parse(client, properties["platform"].data) as Platform;
+            run.System.platform = new Lazy<Platform>(() => platform);
+        }
+
+        if (properties.ContainsKey("region"))
+        {
+            var region = Region.Parse(client, properties["region"].data) as Region;
+            run.System.region = new Lazy<Region>(() => region);
+        }
+
+        run.examiner = !string.IsNullOrEmpty(run.Status.ExaminerUserID)
+            ? new Lazy<User>(() => client.Users.GetUser(run.Status.ExaminerUserID))
+            : new Lazy<User>(() => null);
+    }
+
+    public static Run Parse(SpeedrunComClient client, dynamic runElement)
+    {
+        var run = new Run();
+
+        Parse(run, client, runElement);
+
+        return run;
+    }
+
+    public override int GetHashCode()
+    {
+        return (ID ?? string.Empty).GetHashCode();
+    }
+
+    public override bool Equals(object obj)
+    {
+        if (obj is not Run other)
+        {
+            return false;
+        }
+
+        return ID == other.ID;
+    }
+
+    public override string ToString()
+    {
+        return string.Format("{0} - {1} in {2}", Game.Name, Category.Name, Times.Primary);
+    }
+}

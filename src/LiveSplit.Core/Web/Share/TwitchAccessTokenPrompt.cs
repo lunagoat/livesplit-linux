@@ -1,6 +1,6 @@
-﻿using LiveSplit.UI;
+﻿using LiveSplit.Hosting;
+using LiveSplit.UI;
 using System;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace LiveSplit.Web.Share;
@@ -17,7 +17,7 @@ public class TwitchAccessTokenPrompt
             RedirectUrl,
             "channel:manage:broadcast");
 
-        Process.Start(oauthUrl);
+        PlatformServices.OpenUrl(oauthUrl);
 
         string urlWithToken = null;
         System.Windows.Forms.DialogResult result = InputBox.Show("Twitch Authentication", "After completing the OAuth flow and being redirected to a GitHub Pages 404 error page, copy the full URL from the address bar of your browser:", ref urlWithToken);
