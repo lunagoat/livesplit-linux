@@ -238,10 +238,17 @@ public sealed class DefaultLayoutEditorLauncher : ILayoutEditorLauncher
 {
     public LayoutEditorResult ShowLayoutEditor(LayoutEditorRequest request)
     {
-        return new LayoutEditorResult
+        return UiThread.RunSync(async () =>
         {
-            Result = UiThread.RunSync(() => new View.Dialogs.LayoutComponentSettingsWindow(request).ShowModalAsync(request.Host)),
-        };
+            var dialog = new View.Dialogs.LayoutEditorDialog(request);
+            DialogResult result = await dialog.ShowModalAsync(request.Host);
+            return new LayoutEditorResult
+            {
+                Result = result,
+                ComponentsToDispose = dialog.ComponentsToDispose,
+                ImagesToDispose = dialog.ImagesToDispose,
+            };
+        });
     }
 }
 
@@ -249,8 +256,16 @@ public sealed class DefaultSettingsDialogLauncher : ISettingsDialogLauncher
 {
     public SettingsDialogResult ShowSettings(SettingsDialogRequest request)
     {
-        NotImplementedDialog.Show(request.Host, "The settings dialog");
-        return new SettingsDialogResult { Result = DialogResult.OK, SelectedHotkeyProfile = request.CurrentHotkeyProfile };
+        return UiThread.RunSync(async () =>
+        {
+            var dialog = new View.Dialogs.SettingsDialog(request);
+            DialogResult result = await dialog.ShowModalAsync(request.Host);
+            return new SettingsDialogResult
+            {
+                Result = result,
+                SelectedHotkeyProfile = dialog.SelectedHotkeyProfile ?? request.CurrentHotkeyProfile,
+            };
+        });
     }
 }
 
@@ -258,7 +273,11 @@ public sealed class DefaultShareDialogLauncher : IShareDialogLauncher
 {
     public void ShowShareDialog(ShareDialogRequest request)
     {
-        NotImplementedDialog.Show(request.Host, "The share dialog");
+        UiThread.RunSync(async () =>
+        {
+            var dialog = new View.Dialogs.ShareRunDialog(request);
+            await dialog.ShowModalAsync(request.Host);
+        });
     }
 }
 
