@@ -145,7 +145,7 @@ public sealed class ComponentSettingsViewFactory<TSettings> : IComponentSettings
 
 public static class ComponentSettingsViews
 {
-    private static readonly List<IComponentSettingsViewFactory> Factories = [View.ComponentSettings.Registry.Default];
+    private static readonly List<IComponentSettingsViewFactory> Factories = [View.ComponentSettings.Registry.Default, new View.ComponentSettings.LegacySettingsViewFactory()];
 
     public static void Register(IComponentSettingsViewFactory factory)
     {

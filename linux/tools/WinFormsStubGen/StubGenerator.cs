@@ -284,6 +284,9 @@ public static class StubGenerator
         string outSupportPath = Path.Combine(options.OutDir, "LiveSplit.Compat.WinForms.Support.dll");
         File.Copy(supportDllPath, outSupportPath, overwrite: true);
 
+        // Generate LiveSplit.View.dll
+        GenerateLiveSplitView(options, winFormsAsm, coreAsm, drawingAsm);
+
         // Copy LiveSplit.Core and LiveSplit.Drawing to outDir if not present
         string outCore = Path.Combine(options.OutDir, Path.GetFileName(options.CorePath));
         if (!File.Exists(outCore) || Path.GetFullPath(outCore) != Path.GetFullPath(options.CorePath))
@@ -702,9 +705,9 @@ public static class StubGenerator
         {
             t.Attributes &= ~TypeAttributes.Abstract;
 
-            // Check if class has accessible instance constructor
-            bool hasAccessibleCtor = t.Methods.Any(m => m.IsConstructor && !m.IsStatic && (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly));
-            if (!hasAccessibleCtor)
+            // Check if class has accessible parameterless instance constructor
+            bool hasParameterlessCtor = t.Methods.Any(m => m.IsConstructor && !m.IsStatic && (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly) && m.Parameters.Count == 0);
+            if (!hasParameterlessCtor)
             {
                 var defaultCtor = new MethodDefinition(".ctor",
                     MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
@@ -870,86 +873,240 @@ public static class StubGenerator
         }
     }
 
+    private sealed class StubContext
+    {
+        public ModuleDefinition Module { get; set; } = null!;
+        public AssemblyDefinition SupportAsm { get; set; } = null!;
+        public MethodReference ColAdd { get; set; } = null!;
+        public MethodReference ColAddEmpty { get; set; } = null!;
+        public MethodReference ColAddKeyText { get; set; } = null!;
+        public MethodReference ColAddRange { get; set; } = null!;
+        public MethodReference ColRemove { get; set; } = null!;
+        public MethodReference ColRemoveAt { get; set; } = null!;
+        public MethodReference ColClear { get; set; } = null!;
+        public MethodReference ColCount { get; set; } = null!;
+        public MethodReference ColContains { get; set; } = null!;
+        public MethodReference ColIndexOf { get; set; } = null!;
+        public MethodReference ColGetItem { get; set; } = null!;
+        public MethodReference ColGetItemByName { get; set; } = null!;
+        public MethodReference ColSetItem { get; set; } = null!;
+        public MethodReference ColGetEnumerator { get; set; } = null!;
+        public MethodReference ColInsert { get; set; } = null!;
+        public MethodReference ColCopyTo { get; set; } = null!;
+        public MethodReference TlpAdd { get; set; } = null!;
+        public MethodReference CtrlBindingsAdd { get; set; } = null!;
+        public MethodReference DgvRowAdd { get; set; } = null!;
+        public MethodReference DgvColAdd { get; set; } = null!;
+        public MethodReference DgvRowCountSet { get; set; } = null!;
+        public MethodReference DgvColumnCountSet { get; set; } = null!;
+        public MethodReference DgvBandGetIndex { get; set; } = null!;
+        public MethodReference TsmiAdd { get; set; } = null!;
+        public MethodReference ClampNumeric { get; set; } = null!;
+        public MethodReference InvokeDelegate { get; set; } = null!;
+        public MethodReference FireEvent { get; set; } = null!;
+        public MethodReference ValuesEqual { get; set; } = null!;
+        public MethodReference SetClip { get; set; } = null!;
+        public MethodReference GetClip { get; set; } = null!;
+        public MethodReference HasClip { get; set; } = null!;
+        public MethodReference ClrClip { get; set; } = null!;
+        public MethodReference GetStartup { get; set; } = null!;
+        public MethodReference GetExec { get; set; } = null!;
+        public MethodReference GetProd { get; set; } = null!;
+        public MethodReference GetSelItem { get; set; } = null!;
+        public MethodReference SetCollectionOwner { get; set; } = null!;
+        public MethodReference GetDefaultFont { get; set; } = null!;
+        public MethodReference CreateGraphics { get; set; } = null!;
+        public MethodReference DelegateCombine { get; set; } = null!;
+        public MethodReference DelegateRemove { get; set; } = null!;
+    }
+
     private static void ImplementStubBehaviors(ModuleDefinition module, AssemblyDefinition supportAsm)
     {
         var supportType = supportAsm.MainModule.Types.First(t => t.Name == "StubSupport");
 
-        MethodReference ImportSupport(string name)
+        MethodReference ImportSupport(string name, int paramCount = -1)
         {
-            var method = supportType.Methods.First(m => m.Name == name);
+            var method = paramCount >= 0
+                ? supportType.Methods.First(m => m.Name == name && m.Parameters.Count == paramCount)
+                : supportType.Methods.First(m => m.Name == name);
             return module.ImportReference(method);
         }
 
-        var colAdd = ImportSupport("CollectionAdd");
-        var colAddRange = ImportSupport("CollectionAddRange");
-        var colRemove = ImportSupport("CollectionRemove");
-        var colRemoveAt = ImportSupport("CollectionRemoveAt");
-        var colClear = ImportSupport("CollectionClear");
-        var colCount = ImportSupport("CollectionCount");
-        var colContains = ImportSupport("CollectionContains");
-        var colIndexOf = ImportSupport("CollectionIndexOf");
-        var colGetItem = ImportSupport("CollectionGetItem");
-        var colSetItem = ImportSupport("CollectionSetItem");
-        var colGetEnumerator = ImportSupport("CollectionGetEnumerator");
-        var colInsert = ImportSupport("CollectionInsert");
-
-        var clampNumeric = ImportSupport("ClampNumeric");
-        var invokeDelegate = ImportSupport("InvokeDelegate");
-        var fireEvent = ImportSupport("FireEvent");
-
-        var setClip = ImportSupport("SetClipboardText");
-        var getClip = ImportSupport("GetClipboardText");
-        var hasClip = ImportSupport("ContainsClipboardText");
-        var clrClip = ImportSupport("ClearClipboard");
-
-        var getStartup = ImportSupport("get_StartupPath");
-        var getExec = ImportSupport("get_ExecutablePath");
-        var getProd = ImportSupport("get_ProductVersion");
-        var getSelItem = ImportSupport("GetSelectedItem");
-        var setCollectionOwner = ImportSupport("SetCollectionOwner");
-
-        var delegateCombine = module.ImportReference(typeof(Delegate).GetMethod("Combine", new[] { typeof(Delegate), typeof(Delegate) })!);
-        var delegateRemove = module.ImportReference(typeof(Delegate).GetMethod("Remove", new[] { typeof(Delegate), typeof(Delegate) })!);
-
-        foreach (var type in module.Types.Where(t => t.Name != "<Module>"))
+        var ctx = new StubContext
         {
-            ImplementTypeBehaviors(type, module, supportAsm,
-                colAdd, colAddRange, colRemove, colRemoveAt, colClear, colCount, colContains, colIndexOf, colGetItem, colSetItem, colGetEnumerator, colInsert,
-                clampNumeric, invokeDelegate, fireEvent, setClip, getClip, hasClip, clrClip, getStartup, getExec, getProd, getSelItem, setCollectionOwner,
-                delegateCombine, delegateRemove);
+            Module = module,
+            SupportAsm = supportAsm,
+            ColAdd = ImportSupport("CollectionAdd"),
+            ColAddEmpty = ImportSupport("CollectionAddEmpty"),
+            ColAddKeyText = ImportSupport("CollectionAddKeyText"),
+            ColAddRange = ImportSupport("CollectionAddRange"),
+            ColRemove = ImportSupport("CollectionRemove"),
+            ColRemoveAt = ImportSupport("CollectionRemoveAt"),
+            ColClear = ImportSupport("CollectionClear"),
+            ColCount = ImportSupport("CollectionCount"),
+            ColContains = ImportSupport("CollectionContains"),
+            ColIndexOf = ImportSupport("CollectionIndexOf"),
+            ColGetItem = ImportSupport("CollectionGetItem"),
+            ColGetItemByName = ImportSupport("CollectionGetItemByName"),
+            ColSetItem = ImportSupport("CollectionSetItem"),
+            ColGetEnumerator = ImportSupport("CollectionGetEnumerator"),
+            ColInsert = ImportSupport("CollectionInsert"),
+            ColCopyTo = ImportSupport("CollectionCopyTo"),
+            TlpAdd = ImportSupport("TableLayoutControlCollectionAdd"),
+            CtrlBindingsAdd = ImportSupport("ControlBindingsCollectionAdd"),
+            DgvRowAdd = ImportSupport("DgvRowCollectionAdd"),
+            DgvColAdd = ImportSupport("DgvColumnCollectionAdd"),
+            DgvRowCountSet = ImportSupport("DgvRowCountSet"),
+            DgvColumnCountSet = ImportSupport("DgvColumnCountSet"),
+            DgvBandGetIndex = ImportSupport("DgvBandGetIndex"),
+            TsmiAdd = ImportSupport("ToolStripItemCollectionAdd"),
+            ClampNumeric = ImportSupport("ClampNumeric"),
+            InvokeDelegate = ImportSupport("InvokeDelegate"),
+            FireEvent = ImportSupport("FireEvent", 4),
+            ValuesEqual = ImportSupport("ValuesEqual"),
+            SetClip = ImportSupport("SetClipboardText"),
+            GetClip = ImportSupport("GetClipboardText"),
+            HasClip = ImportSupport("ContainsClipboardText"),
+            ClrClip = ImportSupport("ClearClipboard"),
+            GetStartup = ImportSupport("get_StartupPath"),
+            GetExec = ImportSupport("get_ExecutablePath"),
+            GetProd = ImportSupport("get_ProductVersion"),
+            GetSelItem = ImportSupport("GetSelectedItem"),
+            SetCollectionOwner = ImportSupport("SetCollectionOwner"),
+            GetDefaultFont = ImportSupport("GetDefaultFont"),
+            CreateGraphics = ImportSupport("CreateGraphics"),
+            DelegateCombine = module.ImportReference(typeof(Delegate).GetMethod("Combine", new[] { typeof(Delegate), typeof(Delegate) })!),
+            DelegateRemove = module.ImportReference(typeof(Delegate).GetMethod("Remove", new[] { typeof(Delegate), typeof(Delegate) })!)
+        };
+
+        var sortedTypes = GetAllTypesFlat(module).OrderBy(GetInheritanceDepth).ToList();
+        foreach (var type in sortedTypes)
+        {
+            ImplementTypeBehaviors(type, ctx);
         }
+    }
+
+    private static List<TypeDefinition> GetAllTypesFlat(ModuleDefinition module)
+    {
+        var list = new List<TypeDefinition>();
+        void AddRecursive(TypeDefinition t)
+        {
+            if (t.Name != "<Module>") list.Add(t);
+            foreach (var nt in t.NestedTypes) AddRecursive(nt);
+        }
+        foreach (var t in module.Types) AddRecursive(t);
+        return list;
+    }
+
+    private static int GetInheritanceDepth(TypeDefinition t)
+    {
+        int d = 0;
+        var curr = t;
+        while (curr.BaseType != null)
+        {
+            d++;
+            try
+            {
+                var b = curr.BaseType.Resolve();
+                if (b == null || b == curr) break;
+                curr = b;
+            }
+            catch { break; }
+        }
+        return d;
     }
 
     private static bool IsCollectionType(TypeDefinition t)
     {
+        if (t == null) return false;
+        string name = t.Name;
+        if (name.EndsWith("Collection") || name.EndsWith("CollectionBase"))
+            return true;
+
         var curr = t;
         while (curr != null)
         {
-            if (curr.Name == "ArrangedElementCollection" ||
-                curr.Name == "BaseCollection" ||
-                curr.Name == "ControlCollection" ||
-                curr.Name == "TableLayoutStyleCollection" ||
-                curr.Name == "ObjectCollection" ||
-                curr.Name == "ListViewItemCollection" ||
-                curr.Name == "TreeNodeCollection" ||
-                curr.Name == "ToolStripItemCollection" ||
-                curr.Name == "BindingsCollection")
+            if (curr.Name is "ArrangedElementCollection" or "BaseCollection" or "ControlCollection"
+                or "TableLayoutStyleCollection" or "ObjectCollection" or "ListViewItemCollection"
+                or "TreeNodeCollection" or "ToolStripItemCollection" or "BindingsCollection"
+                or "DataGridViewRowCollection" or "DataGridViewColumnCollection" or "DataGridViewCellCollection"
+                or "MenuItemCollection" or "ColumnHeaderCollection" or "TabPageCollection")
                 return true;
 
+            foreach (var iface in curr.Interfaces)
+            {
+                string ifaceName = iface.InterfaceType.FullName;
+                if (ifaceName is "System.Collections.IList" or "System.Collections.ICollection" or "System.Collections.IEnumerable"
+                    || ifaceName.StartsWith("System.Collections.Generic.IList`")
+                    || ifaceName.StartsWith("System.Collections.Generic.ICollection`")
+                    || ifaceName.StartsWith("System.Collections.Generic.IEnumerable`"))
+                {
+                    return true;
+                }
+            }
+
             if (curr.BaseType == null) break;
-            curr = curr.BaseType.Resolve();
+            try
+            {
+                var resolved = curr.BaseType.Resolve();
+                if (resolved == null || resolved == curr) break;
+                curr = resolved;
+            }
+            catch
+            {
+                break;
+            }
         }
         return false;
     }
 
-    private static void ImplementTypeBehaviors(TypeDefinition type, ModuleDefinition module, AssemblyDefinition supportAsm,
-        MethodReference colAdd, MethodReference colAddRange, MethodReference colRemove, MethodReference colRemoveAt,
-        MethodReference colClear, MethodReference colCount, MethodReference colContains, MethodReference colIndexOf,
-        MethodReference colGetItem, MethodReference colSetItem, MethodReference colGetEnumerator, MethodReference colInsert,
-        MethodReference clampNumeric, MethodReference invokeDelegate, MethodReference fireEvent,
-        MethodReference setClip, MethodReference getClip, MethodReference hasClip, MethodReference clrClip,
-        MethodReference getStartup, MethodReference getExec, MethodReference getProd, MethodReference getSelItem, MethodReference setCollectionOwner,
-        MethodReference delegateCombine, MethodReference delegateRemove)
+    private static FieldReference? FindEventField(TypeDefinition type, string evtName, StubContext ctx)
+    {
+        var curr = type;
+        while (curr != null)
+        {
+            string fieldName = $"<{evtName}>k__BackingField";
+            var ef = curr.Fields.FirstOrDefault(f => f.Name == fieldName);
+            if (ef != null)
+            {
+                return curr == type ? ef : ctx.Module.ImportReference(ef);
+            }
+            if (curr.BaseType == null) break;
+            try
+            {
+                var b = curr.BaseType.Resolve();
+                if (b == null || b == curr) break;
+                curr = b;
+            }
+            catch { break; }
+        }
+        return null;
+    }
+
+    private static FieldReference? FindBackingField(TypeDefinition type, string propName, StubContext ctx)
+    {
+        var curr = type;
+        while (curr != null)
+        {
+            string fieldName = $"<{propName}>k__BackingField";
+            var bf = curr.Fields.FirstOrDefault(f => f.Name == fieldName);
+            if (bf != null)
+            {
+                return curr == type ? bf : ctx.Module.ImportReference(bf);
+            }
+            if (curr.BaseType == null) break;
+            try
+            {
+                var b = curr.BaseType.Resolve();
+                if (b == null || b == curr) break;
+                curr = b;
+            }
+            catch { break; }
+        }
+        return null;
+    }
+
+    private static void ImplementTypeBehaviors(TypeDefinition type, StubContext ctx)
     {
         if (type.IsInterface)
         {
@@ -958,65 +1115,59 @@ public static class StubGenerator
                 if (m.HasBody)
                 {
                     m.Body = new MethodBody(m);
-                    PushDefaultValue(m.Body.Instructions, m.Body, m.ReturnType, module);
+                    PushDefaultValue(m.Body.Instructions, m.Body, m.ReturnType, ctx.Module);
                     m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
                 }
-            }
-            foreach (var nt in type.NestedTypes)
-            {
-                ImplementTypeBehaviors(nt, module, supportAsm,
-                    colAdd, colAddRange, colRemove, colRemoveAt, colClear, colCount, colContains, colIndexOf, colGetItem, colSetItem, colGetEnumerator, colInsert,
-                    clampNumeric, invokeDelegate, fireEvent, setClip, getClip, hasClip, clrClip, getStartup, getExec, getProd, getSelItem, setCollectionOwner,
-                    delegateCombine, delegateRemove);
             }
             return;
         }
 
         if (type.IsEnum || IsDelegate(type))
         {
-            foreach (var nt in type.NestedTypes)
-            {
-                ImplementTypeBehaviors(nt, module, supportAsm,
-                    colAdd, colAddRange, colRemove, colRemoveAt, colClear, colCount, colContains, colIndexOf, colGetItem, colSetItem, colGetEnumerator, colInsert,
-                    clampNumeric, invokeDelegate, fireEvent, setClip, getClip, hasClip, clrClip, getStartup, getExec, getProd, getSelItem, setCollectionOwner,
-                    delegateCombine, delegateRemove);
-            }
             return;
         }
 
         bool isCollection = IsCollectionType(type);
 
         // 1. Process Fields for property backing
-        var backingFields = new Dictionary<string, FieldDefinition>();
+        var backingFields = new Dictionary<string, FieldReference>();
         foreach (var prop in type.Properties)
         {
             if (prop.Parameters.Count == 0) // Not an indexer
             {
-                string fieldName = $"<{prop.Name}>k__BackingField";
-                var bf = type.Fields.FirstOrDefault(f => f.Name == fieldName);
-                if (bf == null)
+                var existingBf = FindBackingField(type, prop.Name, ctx);
+                if (existingBf != null && existingBf.FieldType.FullName == prop.PropertyType.FullName)
                 {
-                    var fieldAttr = FieldAttributes.Private;
-                    if ((prop.GetMethod != null && prop.GetMethod.IsStatic) || (prop.SetMethod != null && prop.SetMethod.IsStatic))
-                    {
-                        fieldAttr |= FieldAttributes.Static;
-                    }
-                    bf = new FieldDefinition(fieldName, fieldAttr, prop.PropertyType);
-                    type.Fields.Add(bf);
+                    backingFields[prop.Name] = existingBf;
                 }
-                backingFields[prop.Name] = bf;
+                else
+                {
+                    string fieldName = $"<{prop.Name}>k__BackingField";
+                    var bf = type.Fields.FirstOrDefault(f => f.Name == fieldName);
+                    if (bf == null)
+                    {
+                        var fieldAttr = FieldAttributes.Family;
+                        if ((prop.GetMethod != null && prop.GetMethod.IsStatic) || (prop.SetMethod != null && prop.SetMethod.IsStatic))
+                        {
+                            fieldAttr |= FieldAttributes.Static;
+                        }
+                        bf = new FieldDefinition(fieldName, fieldAttr, prop.PropertyType);
+                        type.Fields.Add(bf);
+                    }
+                    backingFields[prop.Name] = bf;
+                }
             }
         }
 
         // 2. Process Events
-        var eventFields = new Dictionary<string, FieldDefinition>();
+        var eventFields = new Dictionary<string, FieldReference>();
         foreach (var evt in type.Events)
         {
             string fieldName = $"<{evt.Name}>k__BackingField";
             var ef = type.Fields.FirstOrDefault(f => f.Name == fieldName);
             if (ef == null)
             {
-                var fieldAttr = FieldAttributes.Private;
+                var fieldAttr = FieldAttributes.Family;
                 if ((evt.AddMethod != null && evt.AddMethod.IsStatic) || (evt.RemoveMethod != null && evt.RemoveMethod.IsStatic))
                 {
                     fieldAttr |= FieldAttributes.Static;
@@ -1035,7 +1186,7 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldfld, ef));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, delegateCombine));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.DelegateCombine));
                 il.Add(Instruction.Create(OpCodes.Castclass, evt.EventType));
                 il.Add(Instruction.Create(OpCodes.Stfld, ef));
                 il.Add(Instruction.Create(OpCodes.Ret));
@@ -1050,7 +1201,7 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldfld, ef));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, delegateRemove));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.DelegateRemove));
                 il.Add(Instruction.Create(OpCodes.Castclass, evt.EventType));
                 il.Add(Instruction.Create(OpCodes.Stfld, ef));
                 il.Add(Instruction.Create(OpCodes.Ret));
@@ -1060,7 +1211,7 @@ public static class StubGenerator
         // 3. Process Constructors
         foreach (var ctor in type.Methods.Where(m => m.IsConstructor && !m.IsStatic))
         {
-            ImplementConstructor(ctor, type, module, backingFields, setCollectionOwner, isCollection);
+            ImplementConstructor(ctor, type, ctx, backingFields, isCollection);
         }
 
         // 4. Process Properties
@@ -1069,7 +1220,7 @@ public static class StubGenerator
         {
             if (prop.GetMethod != null) propertyMethods.Add(prop.GetMethod);
             if (prop.SetMethod != null) propertyMethods.Add(prop.SetMethod);
-            ImplementProperty(prop, type, module, backingFields, eventFields, clampNumeric, fireEvent, getSelItem, isCollection, colCount, setCollectionOwner, colGetItem, colSetItem);
+            ImplementProperty(prop, type, ctx, backingFields, eventFields, isCollection);
         }
 
         var eventMethods = new HashSet<MethodDefinition>();
@@ -1086,23 +1237,12 @@ public static class StubGenerator
             if (propertyMethods.Contains(m)) continue;
             if (eventMethods.Contains(m)) continue;
 
-            ImplementMethod(m, type, module, isCollection,
-                colAdd, colAddRange, colRemove, colRemoveAt, colClear, colCount, colContains, colIndexOf, colGetItem, colSetItem, colGetEnumerator, colInsert,
-                invokeDelegate, setClip, getClip, hasClip, clrClip, getStartup, getExec, getProd);
-        }
-
-        // Process Nested Types
-        foreach (var nt in type.NestedTypes)
-        {
-            ImplementTypeBehaviors(nt, module, supportAsm,
-                colAdd, colAddRange, colRemove, colRemoveAt, colClear, colCount, colContains, colIndexOf, colGetItem, colSetItem, colGetEnumerator, colInsert,
-                clampNumeric, invokeDelegate, fireEvent, setClip, getClip, hasClip, clrClip, getStartup, getExec, getProd, getSelItem, setCollectionOwner,
-                delegateCombine, delegateRemove);
+            ImplementMethod(m, type, ctx, isCollection);
         }
     }
 
-    private static void ImplementConstructor(MethodDefinition ctor, TypeDefinition type, ModuleDefinition module,
-        Dictionary<string, FieldDefinition> backingFields, MethodReference setCollectionOwner, bool isCollection)
+    private static void ImplementConstructor(MethodDefinition ctor, TypeDefinition type, StubContext ctx,
+        Dictionary<string, FieldReference> backingFields, bool isCollection)
     {
         ctor.Body = new MethodBody(ctor);
         var il = ctor.Body.Instructions;
@@ -1120,20 +1260,20 @@ public static class StubGenerator
                     .ToList();
                 if (accessibleCtors.Count > 0)
                 {
-                    baseCtor = module.ImportReference(accessibleCtors[0]);
+                    baseCtor = ctx.Module.ImportReference(accessibleCtors[0]);
                 }
             }
 
             if (baseCtor == null)
             {
-                var objCtor = module.ImportReference(typeof(object).GetConstructor(Type.EmptyTypes)!);
+                var objCtor = ctx.Module.ImportReference(typeof(object).GetConstructor(Type.EmptyTypes)!);
                 baseCtor = objCtor;
             }
 
             il.Add(Instruction.Create(OpCodes.Ldarg_0));
             foreach (var p in baseCtor.Parameters)
             {
-                PushDefaultValue(il, ctor.Body, p.ParameterType, module);
+                PushDefaultValue(il, ctor.Body, p.ParameterType, ctx.Module);
             }
             il.Add(Instruction.Create(OpCodes.Call, baseCtor));
         }
@@ -1142,7 +1282,19 @@ public static class StubGenerator
         {
             il.Add(Instruction.Create(OpCodes.Ldarg_0));
             il.Add(Instruction.Create(OpCodes.Ldarg_1));
-            il.Add(Instruction.Create(OpCodes.Call, setCollectionOwner));
+            il.Add(Instruction.Create(OpCodes.Call, ctx.SetCollectionOwner));
+        }
+
+        // Initialize Text property if first parameter is string
+        if (ctor.Parameters.Count > 0 && ctor.Parameters[0].ParameterType.FullName == "System.String")
+        {
+            var textFld = FindBackingField(type, "Text", ctx);
+            if (textFld != null)
+            {
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                il.Add(Instruction.Create(OpCodes.Stfld, textFld));
+            }
         }
 
         // Default initializations
@@ -1152,21 +1304,21 @@ public static class StubGenerator
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldc_I4_0));
-                il.Add(Instruction.Create(OpCodes.Newobj, module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
+                il.Add(Instruction.Create(OpCodes.Newobj, ctx.Module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
                 il.Add(Instruction.Create(OpCodes.Stfld, minFld));
             }
             if (backingFields.TryGetValue("Maximum", out var maxFld))
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldc_I4, 100));
-                il.Add(Instruction.Create(OpCodes.Newobj, module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
+                il.Add(Instruction.Create(OpCodes.Newobj, ctx.Module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
                 il.Add(Instruction.Create(OpCodes.Stfld, maxFld));
             }
             if (backingFields.TryGetValue("Increment", out var incFld))
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldc_I4_1));
-                il.Add(Instruction.Create(OpCodes.Newobj, module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
+                il.Add(Instruction.Create(OpCodes.Newobj, ctx.Module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!)));
                 il.Add(Instruction.Create(OpCodes.Stfld, incFld));
             }
         }
@@ -1230,18 +1382,102 @@ public static class StubGenerator
         var curr = t;
         while (curr != null)
         {
-            if (curr.Name == baseName) return true;
+            if (curr.Name == baseName || curr.FullName == baseName) return true;
             if (curr.BaseType == null) break;
-            curr = curr.BaseType.Resolve();
+            try
+            {
+                var resolved = curr.BaseType.Resolve();
+                if (resolved == null || resolved == curr) break;
+                curr = resolved;
+            }
+            catch
+            {
+                break;
+            }
         }
         return false;
     }
 
-    private static void ImplementProperty(PropertyDefinition prop, TypeDefinition type, ModuleDefinition module,
-        Dictionary<string, FieldDefinition> backingFields, Dictionary<string, FieldDefinition> eventFields,
-        MethodReference clampNumeric, MethodReference fireEvent, MethodReference getSelItem,
-        bool isCollection, MethodReference colCount, MethodReference setCollectionOwner,
-        MethodReference colGetItem, MethodReference colSetItem)
+    private static bool ShouldLazilyCreate(PropertyDefinition prop)
+    {
+        if (prop.PropertyType.IsValueType) return false;
+        if (prop.GetMethod == null || prop.GetMethod.IsStatic) return false;
+
+        string propName = prop.Name;
+        // Explicit deny-list of property names that are user-assigned or references:
+        if (propName is "Parent" or "TopLevelControl" or "ActiveControl" or "ActiveForm"
+            or "Owner" or "ContextMenu" or "ContextMenuStrip" or "Tag" or "DataSource"
+            or "Site" or "FindForm" or "Container" or "MasterControl" or "TargetControl"
+            or "BindingContext" or "DefaultView" or "Component" or "NativeWindow"
+            or "InnerList" or "SyncRoot")
+        {
+            return false;
+        }
+
+        var pType = prop.PropertyType.Resolve();
+        if (pType == null) return false;
+
+        string pTypeName = pType.Name;
+        string pTypeFull = pType.FullName;
+
+        // Deny basic types
+        if (pTypeFull == "System.String" || pTypeFull == "System.Type") return false;
+        if (IsDelegate(pType)) return false;
+        if (pType.IsInterface) return false;
+
+        // Deny Drawing resources: Image, Icon, Cursor, Font, Brush, Pen, Color, etc.
+        if (pTypeName is "Image" or "Bitmap" or "Icon" or "Cursor" or "Font" or "Brush" or "Pen" or "SolidBrush") return false;
+        if (pTypeFull.StartsWith("System.Drawing.")) return false;
+
+        // Allow-list:
+        if (pTypeName == "SplitterPanel" || propName is "Panel1" or "Panel2") return true;
+
+        if (pTypeName is "DataGridViewCellStyle" or "TableLayoutSettings" or "ControlBindingsCollection"
+            or "ListViewGroupCollection" or "TableLayoutColumnStyleCollection" or "TableLayoutRowStyleCollection"
+            or "TableLayoutControlCollection" or "ControlCollection" or "MenuItemCollection"
+            or "ToolStripItemCollection" or "TreeNodeCollection" or "TabPageCollection"
+            or "DataGridViewRowCollection" or "DataGridViewColumnCollection" or "DataGridViewCellCollection"
+            or "ListViewItemCollection" or "ColumnHeaderCollection" or "ObjectCollection"
+            or "ImageCollection" or "HeaderCollection" or "AutoCompleteStringCollection"
+            or "ListViewSubItemCollection")
+        {
+            return true;
+        }
+
+        if (pTypeName.EndsWith("Collection") || pTypeName.EndsWith("CollectionBase")) return true;
+
+        if (IsCollectionType(pType)) return true;
+
+        if (pTypeName.EndsWith("Settings") || pTypeName.EndsWith("LayoutSettings")) return true;
+
+        return false;
+    }
+
+    private static MethodReference FindLazyConstructor(PropertyDefinition prop, TypeDefinition declaringType, ModuleDefinition module)
+    {
+        if (!ShouldLazilyCreate(prop)) return null;
+
+        var pType = prop.PropertyType.Resolve();
+        if (pType == null) return null;
+
+        MethodReference SafeImport(MethodDefinition m) => m.DeclaringType?.Module == module ? m : module.ImportReference(m);
+
+        var ctors = pType.Methods
+            .Where(m => m.IsConstructor && !m.IsStatic && (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly || m.IsAssembly))
+            .OrderBy(m => m.Parameters.Count)
+            .ToList();
+
+        if (ctors.Count > 0)
+        {
+            return SafeImport(ctors[0]);
+        }
+
+        return null;
+    }
+
+    private static void ImplementProperty(PropertyDefinition prop, TypeDefinition type, StubContext ctx,
+        Dictionary<string, FieldReference> backingFields, Dictionary<string, FieldReference> eventFields,
+        bool isCollection)
     {
         if (prop.Parameters.Count > 0) // Indexer
         {
@@ -1254,7 +1490,21 @@ public static class StubGenerator
                 {
                     il.Add(Instruction.Create(OpCodes.Ldarg_0));
                     il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                    il.Add(Instruction.Create(OpCodes.Call, colGetItem));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetItem));
+                    if (gm.ReturnType.FullName != "System.Object")
+                    {
+                        if (gm.ReturnType.IsValueType)
+                            il.Add(Instruction.Create(OpCodes.Unbox_Any, gm.ReturnType));
+                        else
+                            il.Add(Instruction.Create(OpCodes.Castclass, gm.ReturnType));
+                    }
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                }
+                else if (isCollection && gm.Parameters.Count == 1 && gm.Parameters[0].ParameterType.FullName == "System.String")
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetItemByName));
                     if (gm.ReturnType.FullName != "System.Object")
                     {
                         if (gm.ReturnType.IsValueType)
@@ -1266,7 +1516,7 @@ public static class StubGenerator
                 }
                 else
                 {
-                    PushDefaultValue(il, gm.Body, gm.ReturnType, module);
+                    PushDefaultValue(il, gm.Body, gm.ReturnType, ctx.Module);
                     il.Add(Instruction.Create(OpCodes.Ret));
                 }
             }
@@ -1282,7 +1532,7 @@ public static class StubGenerator
                     il.Add(Instruction.Create(OpCodes.Ldarg_2));
                     if (sm.Parameters[1].ParameterType.IsValueType)
                         il.Add(Instruction.Create(OpCodes.Box, sm.Parameters[1].ParameterType));
-                    il.Add(Instruction.Create(OpCodes.Call, colSetItem));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColSetItem));
                     il.Add(Instruction.Create(OpCodes.Ret));
                 }
                 else
@@ -1298,12 +1548,85 @@ public static class StubGenerator
             var m = prop.GetMethod;
             m.Body = new MethodBody(m);
             m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
-            m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, colCount));
+            m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
             m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
             return;
         }
 
-        if (type.FullName == "System.Windows.Forms.Padding")
+        if ((type.Name == "DataGridViewBand" || InheritsFrom(type, "DataGridViewBand")) && prop.Name == "Index")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.DgvBandGetIndex));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            if (prop.SetMethod != null)
+            {
+                var m = prop.SetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if (type.Name == "DataGridView" && prop.Name == "RowCount")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                var rowsProp = type.Properties.FirstOrDefault(p => p.Name == "Rows");
+                if (rowsProp?.GetMethod != null)
+                {
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Callvirt, rowsProp.GetMethod));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+            }
+            if (prop.SetMethod != null)
+            {
+                var m = prop.SetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowCountSet));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if (type.Name == "DataGridView" && prop.Name == "ColumnCount")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                var colsProp = type.Properties.FirstOrDefault(p => p.Name == "Columns");
+                if (colsProp?.GetMethod != null)
+                {
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Callvirt, colsProp.GetMethod));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+            }
+            if (prop.SetMethod != null)
+            {
+                var m = prop.SetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.DgvColumnCountSet));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if (type.Name == "Padding")
         {
             if (prop.Name == "All")
             {
@@ -1379,7 +1702,7 @@ public static class StubGenerator
                     il.Add(Instruction.Create(OpCodes.Ldnull));
                 }
 
-                il.Add(Instruction.Create(OpCodes.Call, getSelItem));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetSelItem));
                 il.Add(Instruction.Create(OpCodes.Ret));
             }
             if (prop.SetMethod != null && selBf != null)
@@ -1387,11 +1710,51 @@ public static class StubGenerator
                 var m = prop.SetMethod;
                 m.Body = new MethodBody(m);
                 var il = m.Body.Instructions;
+                eventFields.TryGetValue("SelectedIndexChanged", out var selChangedEvt);
+
+                var exitLabel = Instruction.Create(OpCodes.Nop);
+
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldfld, selBf));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ValuesEqual));
+                il.Add(Instruction.Create(OpCodes.Brtrue_S, exitLabel));
+
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 il.Add(Instruction.Create(OpCodes.Stfld, selBf));
+
+                if (selChangedEvt != null)
+                {
+                    var popAndExit = Instruction.Create(OpCodes.Nop);
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldfld, selChangedEvt));
+                    il.Add(Instruction.Create(OpCodes.Dup));
+                    il.Add(Instruction.Create(OpCodes.Brfalse_S, popAndExit));
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldnull));
+                    il.Add(Instruction.Create(OpCodes.Ldstr, "SelectedIndexChanged"));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.FireEvent));
+                    il.Add(Instruction.Create(OpCodes.Br_S, exitLabel));
+
+                    il.Add(popAndExit);
+                    il.Add(Instruction.Create(OpCodes.Pop));
+                }
+
+                il.Add(exitLabel);
                 il.Add(Instruction.Create(OpCodes.Ret));
             }
+            return;
+        }
+
+        if (type.Name == "Control" && prop.Name == "DefaultFont" && prop.GetMethod != null)
+        {
+            var m = prop.GetMethod;
+            m.Body = new MethodBody(m);
+            m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.GetDefaultFont));
+            m.Body.Instructions.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
+            m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
             return;
         }
 
@@ -1406,49 +1769,72 @@ public static class StubGenerator
             m.Body = new MethodBody(m);
             var il = m.Body.Instructions;
 
-            MethodReference lazyCtor = FindLazyConstructor(prop, type, module);
-            if (lazyCtor != null && !isStatic)
+            if (prop.Name == "Font" && (type.Name == "Control" || InheritsFrom(type, "Control")) && !isStatic)
             {
-                var retLabel = Instruction.Create(OpCodes.Nop);
-
+                var useDefault = Instruction.Create(OpCodes.Nop);
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldfld, bf));
                 il.Add(Instruction.Create(OpCodes.Dup));
-                il.Add(Instruction.Create(OpCodes.Brtrue_S, retLabel));
+                il.Add(Instruction.Create(OpCodes.Brfalse_S, useDefault));
+                il.Add(Instruction.Create(OpCodes.Ret));
+
+                il.Add(useDefault);
                 il.Add(Instruction.Create(OpCodes.Pop));
-
-                il.Add(Instruction.Create(OpCodes.Ldarg_0)); // this for stfld
-                if (lazyCtor.Parameters.Count == 1)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0)); // owner for ctor
-                }
-                il.Add(Instruction.Create(OpCodes.Newobj, lazyCtor));
-                if (prop.Name == "Controls")
-                {
-                    il.Add(Instruction.Create(OpCodes.Dup));
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Call, setCollectionOwner));
-                }
-                il.Add(Instruction.Create(OpCodes.Stfld, bf));
-
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldfld, bf));
-
-                il.Add(retLabel);
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetDefaultFont));
+                il.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
                 il.Add(Instruction.Create(OpCodes.Ret));
             }
             else
             {
-                if (isStatic)
+                MethodReference lazyCtor = FindLazyConstructor(prop, type, ctx.Module);
+                if (lazyCtor != null && !isStatic)
                 {
-                    il.Add(Instruction.Create(OpCodes.Ldsfld, bf));
+                    var retLabel = Instruction.Create(OpCodes.Nop);
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+                    il.Add(Instruction.Create(OpCodes.Dup));
+                    il.Add(Instruction.Create(OpCodes.Brtrue_S, retLabel));
+                    il.Add(Instruction.Create(OpCodes.Pop));
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0)); // this for stfld
+                    for (int i = 0; i < lazyCtor.Parameters.Count; i++)
+                    {
+                        var p = lazyCtor.Parameters[i];
+                        if (i == 0 && (p.ParameterType.FullName == type.FullName || InheritsFrom(type, p.ParameterType.FullName)))
+                        {
+                            il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        }
+                        else
+                        {
+                            PushDefaultValue(il, m.Body, p.ParameterType, ctx.Module);
+                        }
+                    }
+                    il.Add(Instruction.Create(OpCodes.Newobj, lazyCtor));
+                    il.Add(Instruction.Create(OpCodes.Dup));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.SetCollectionOwner));
+                    il.Add(Instruction.Create(OpCodes.Stfld, bf));
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+
+                    il.Add(retLabel);
+                    il.Add(Instruction.Create(OpCodes.Ret));
                 }
                 else
                 {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+                    if (isStatic)
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldsfld, bf));
+                    }
+                    else
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+                    }
+                    il.Add(Instruction.Create(OpCodes.Ret));
                 }
-                il.Add(Instruction.Create(OpCodes.Ret));
             }
         }
 
@@ -1459,88 +1845,135 @@ public static class StubGenerator
             m.Body = new MethodBody(m);
             var il = m.Body.Instructions;
 
+            // Find associated change event
+            string? eventName = null;
+            FieldReference? changeEvt = null;
+            var ce = FindEventField(type, prop.Name + "Changed", ctx);
+            if (ce != null)
+            {
+                eventName = prop.Name + "Changed";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "Checked" && (ce = FindEventField(type, "CheckedChanged", ctx)) != null)
+            {
+                eventName = "CheckedChanged";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "Value" && (ce = FindEventField(type, "ValueChanged", ctx)) != null)
+            {
+                eventName = "ValueChanged";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "Text" && (ce = FindEventField(type, "TextChanged", ctx)) != null)
+            {
+                eventName = "TextChanged";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "SelectedIndex" && (ce = FindEventField(type, "SelectedIndexChanged", ctx)) != null)
+            {
+                eventName = "SelectedIndexChanged";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "SelectedValue" && (ce = FindEventField(type, "SelectedValueChanged", ctx)) != null)
+            {
+                eventName = "SelectedValueChanged";
+                changeEvt = ce;
+            }
+            else if (prop.Name == "CheckState" && (ce = FindEventField(type, "CheckStateChanged", ctx)) != null)
+            {
+                eventName = "CheckStateChanged";
+                changeEvt = ce;
+            }
+
             if (type.Name == "NumericUpDown" && prop.Name == "Value")
             {
                 backingFields.TryGetValue("Minimum", out var minFld);
                 backingFields.TryGetValue("Maximum", out var maxFld);
-                eventFields.TryGetValue("ValueChanged", out var valChangedEvt);
 
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                var clampedVar = new VariableDefinition(prop.PropertyType);
+                m.Body.Variables.Add(clampedVar);
+
                 il.Add(Instruction.Create(OpCodes.Ldarg_1)); // value
                 if (minFld != null) { il.Add(Instruction.Create(OpCodes.Ldarg_0)); il.Add(Instruction.Create(OpCodes.Ldfld, minFld)); }
-                else { il.Add(Instruction.Create(OpCodes.Ldc_I4_0)); il.Add(Instruction.Create(OpCodes.Newobj, module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!))); }
+                else { il.Add(Instruction.Create(OpCodes.Ldc_I4_0)); il.Add(Instruction.Create(OpCodes.Newobj, ctx.Module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!))); }
                 if (maxFld != null) { il.Add(Instruction.Create(OpCodes.Ldarg_0)); il.Add(Instruction.Create(OpCodes.Ldfld, maxFld)); }
-                else { il.Add(Instruction.Create(OpCodes.Ldc_I4, 100)); il.Add(Instruction.Create(OpCodes.Newobj, module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!))); }
-                il.Add(Instruction.Create(OpCodes.Call, clampNumeric));
+                else { il.Add(Instruction.Create(OpCodes.Ldc_I4, 100)); il.Add(Instruction.Create(OpCodes.Newobj, ctx.Module.ImportReference(typeof(decimal).GetConstructor(new[] { typeof(int) })!))); }
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ClampNumeric));
+                il.Add(Instruction.Create(OpCodes.Stloc, clampedVar));
 
+                var exitLabel = Instruction.Create(OpCodes.Nop);
+
+                // Compare old value with clamped value
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+                il.Add(Instruction.Create(OpCodes.Box, prop.PropertyType));
+                il.Add(Instruction.Create(OpCodes.Ldloc, clampedVar));
+                il.Add(Instruction.Create(OpCodes.Box, prop.PropertyType));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ValuesEqual));
+                il.Add(Instruction.Create(OpCodes.Brtrue_S, exitLabel));
+
+                // Store clamped value
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldloc, clampedVar));
                 il.Add(Instruction.Create(OpCodes.Stfld, bf));
 
-                if (valChangedEvt != null)
+                // Fire event if hooked
+                if (changeEvt != null)
                 {
+                    var popAndExit = Instruction.Create(OpCodes.Nop);
                     il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, valChangedEvt));
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                    il.Add(Instruction.Create(OpCodes.Call, fireEvent));
+                    il.Add(Instruction.Create(OpCodes.Ldfld, changeEvt));
+                    il.Add(Instruction.Create(OpCodes.Dup));
+                    il.Add(Instruction.Create(OpCodes.Brfalse_S, popAndExit));
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0)); // sender
+                    il.Add(Instruction.Create(OpCodes.Ldnull));  // args
+                    il.Add(Instruction.Create(OpCodes.Ldstr, eventName));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.FireEvent));
+                    il.Add(Instruction.Create(OpCodes.Br_S, exitLabel));
+
+                    il.Add(popAndExit);
+                    il.Add(Instruction.Create(OpCodes.Pop));
                 }
 
+                il.Add(exitLabel);
                 il.Add(Instruction.Create(OpCodes.Ret));
             }
-            else if ((type.Name == "CheckBox" || type.Name == "RadioButton") && prop.Name == "Checked")
+            else if (changeEvt != null && !isStatic)
             {
-                eventFields.TryGetValue("CheckedChanged", out var chkChangedEvt);
+                var exitLabel = Instruction.Create(OpCodes.Nop);
 
+                // Compare old value with new value
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldfld, bf));
+                if (bf.FieldType.IsValueType) il.Add(Instruction.Create(OpCodes.Box, bf.FieldType));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                if (prop.PropertyType.IsValueType) il.Add(Instruction.Create(OpCodes.Box, prop.PropertyType));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ValuesEqual));
+                il.Add(Instruction.Create(OpCodes.Brtrue_S, exitLabel));
+
+                // Store new value
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 il.Add(Instruction.Create(OpCodes.Stfld, bf));
 
-                if (chkChangedEvt != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, chkChangedEvt));
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                    il.Add(Instruction.Create(OpCodes.Call, fireEvent));
-                }
-
-                il.Add(Instruction.Create(OpCodes.Ret));
-            }
-            else if (type.Name == "TextBoxBase" && prop.Name == "Text")
-            {
-                eventFields.TryGetValue("TextChanged", out var txtChangedEvt);
-
+                // Fire event
+                var popAndExit = Instruction.Create(OpCodes.Nop);
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Stfld, bf));
+                il.Add(Instruction.Create(OpCodes.Ldfld, changeEvt));
+                il.Add(Instruction.Create(OpCodes.Dup));
+                il.Add(Instruction.Create(OpCodes.Brfalse_S, popAndExit));
 
-                if (txtChangedEvt != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, txtChangedEvt));
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                    il.Add(Instruction.Create(OpCodes.Call, fireEvent));
-                }
+                il.Add(Instruction.Create(OpCodes.Ldarg_0)); // sender
+                il.Add(Instruction.Create(OpCodes.Ldnull));  // args
+                il.Add(Instruction.Create(OpCodes.Ldstr, eventName));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.FireEvent));
+                il.Add(Instruction.Create(OpCodes.Br_S, exitLabel));
 
-                il.Add(Instruction.Create(OpCodes.Ret));
-            }
-            else if (type.Name == "ComboBox" && prop.Name == "SelectedIndex")
-            {
-                eventFields.TryGetValue("SelectedIndexChanged", out var selChangedEvt);
+                il.Add(popAndExit);
+                il.Add(Instruction.Create(OpCodes.Pop));
 
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Stfld, bf));
-
-                if (selChangedEvt != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, selChangedEvt));
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                    il.Add(Instruction.Create(OpCodes.Call, fireEvent));
-                }
-
+                il.Add(exitLabel);
                 il.Add(Instruction.Create(OpCodes.Ret));
             }
             else
@@ -1561,91 +1994,7 @@ public static class StubGenerator
         }
     }
 
-    private static MethodReference FindLazyConstructor(PropertyDefinition prop, TypeDefinition declaringType, ModuleDefinition module)
-    {
-        if (prop.PropertyType.IsValueType) return null;
-        string propName = prop.Name;
-        if (propName == "Parent" || propName == "Site" || propName == "Container" || propName == "TopLevelControl") return null;
-        var pType = prop.PropertyType.Resolve();
-        if (pType == null || pType.Scope == null) return null;
-
-        MethodReference SafeImport(MethodDefinition m) => m.DeclaringType?.Module == module ? m : module.ImportReference(m);
-
-        if (propName == "Controls")
-        {
-            if (declaringType.Name == "TableLayoutPanel")
-            {
-                var tlcc = module.Types.FirstOrDefault(t => t.Name == "TableLayoutControlCollection");
-                if (tlcc != null)
-                {
-                    var c = tlcc.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-                    if (c != null) return SafeImport(c);
-                }
-            }
-            var cc = module.Types.FirstOrDefault(t => t.Name == "ControlCollection");
-            if (cc != null)
-            {
-                var c = cc.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-                if (c != null) return SafeImport(c);
-            }
-        }
-
-        if (propName == "DataBindings")
-        {
-            var cbc = module.Types.FirstOrDefault(t => t.Name == "ControlBindingsCollection");
-            if (cbc != null)
-            {
-                var c = cbc.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-                if (c != null) return SafeImport(c);
-            }
-        }
-
-        if (propName == "ColumnStyles")
-        {
-            var colStyles = module.Types.FirstOrDefault(t => t.Name == "TableLayoutColumnStyleCollection");
-            if (colStyles != null)
-            {
-                var c = colStyles.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 0)
-                    ?? colStyles.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-                if (c != null) return SafeImport(c);
-            }
-        }
-
-        if (propName == "RowStyles")
-        {
-            var rowStyles = module.Types.FirstOrDefault(t => t.Name == "TableLayoutRowStyleCollection");
-            if (rowStyles != null)
-            {
-                var c = rowStyles.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 0)
-                    ?? rowStyles.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-                if (c != null) return SafeImport(c);
-            }
-        }
-
-        if (pType.Name == "ObjectCollection")
-        {
-            var ctorWithOwner = pType.Methods.FirstOrDefault(m => m.IsConstructor && m.Parameters.Count == 1);
-            if (ctorWithOwner != null) return SafeImport(ctorWithOwner);
-        }
-
-        if (pType.IsClass && !pType.IsValueType && !pType.IsAbstract && !pType.IsInterface && pType.FullName != "System.String")
-        {
-            var defaultCtor = pType.Methods.FirstOrDefault(m => m.IsConstructor && !m.IsStatic && m.Parameters.Count == 0);
-            if (defaultCtor != null) return SafeImport(defaultCtor);
-
-            var ownerCtor = pType.Methods.FirstOrDefault(m => m.IsConstructor && !m.IsStatic && m.Parameters.Count == 1);
-            if (ownerCtor != null) return SafeImport(ownerCtor);
-        }
-
-        return null;
-    }
-
-    private static void ImplementMethod(MethodDefinition m, TypeDefinition type, ModuleDefinition module, bool isCollection,
-        MethodReference colAdd, MethodReference colAddRange, MethodReference colRemove, MethodReference colRemoveAt,
-        MethodReference colClear, MethodReference colCount, MethodReference colContains, MethodReference colIndexOf,
-        MethodReference colGetItem, MethodReference colSetItem, MethodReference colGetEnumerator, MethodReference colInsert,
-        MethodReference invokeDelegate, MethodReference setClip, MethodReference getClip, MethodReference hasClip, MethodReference clrClip,
-        MethodReference getStartup, MethodReference getExec, MethodReference getProd)
+    private static void ImplementMethod(MethodDefinition m, TypeDefinition type, StubContext ctx, bool isCollection)
     {
         m.Body = new MethodBody(m);
         var il = m.Body.Instructions;
@@ -1654,16 +2003,160 @@ public static class StubGenerator
         {
             if (m.Name == "Add")
             {
+                if (m.Parameters.Count == 0)
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColAddEmpty));
+                    if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
+                if (m.Parameters.Count == 1)
+                {
+                    if (type.Name == "DataGridViewRowCollection" && m.Parameters[0].ParameterType.FullName == "System.Object[]")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAdd));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    if (m.Parameters[0].ParameterType.IsValueType)
+                        il.Add(Instruction.Create(OpCodes.Box, m.Parameters[0].ParameterType));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColAdd));
+
+                    if (m.ReturnType.FullName == "System.Void")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Pop));
+                    }
+                    else if (m.ReturnType.FullName == "System.Int32")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
+                        il.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+                        il.Add(Instruction.Create(OpCodes.Sub));
+                    }
+                    else if (m.ReturnType.IsValueType)
+                    {
+                        il.Add(Instruction.Create(OpCodes.Unbox_Any, m.ReturnType));
+                    }
+                    else if (m.ReturnType.FullName != "System.Object")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                    }
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
+                if (m.Parameters.Count == 2)
+                {
+                    if (type.Name == "DataGridViewColumnCollection" && m.Parameters[0].ParameterType.FullName == "System.String" && m.Parameters[1].ParameterType.FullName == "System.String")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.DgvColAdd));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                    if (m.Parameters[0].ParameterType.FullName == "System.String" && m.Parameters[1].ParameterType.FullName == "System.String")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.ColAddKeyText));
+                        if (m.ReturnType.FullName == "System.Void")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Pop));
+                        }
+                        else if (m.ReturnType.FullName == "System.Int32")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Pop));
+                            il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                            il.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
+                            il.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+                            il.Add(Instruction.Create(OpCodes.Sub));
+                        }
+                        else if (m.ReturnType.FullName != "System.Object")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                        }
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                }
+                if (m.Parameters.Count == 3)
+                {
+                    if (type.Name == "TableLayoutControlCollection")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_3));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.TlpAdd));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                    if (type.Name == "ToolStripItemCollection" && m.Parameters[0].ParameterType.FullName == "System.String")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_3));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.TsmiAdd));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        else if (m.ReturnType.FullName != "System.Object") il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                }
+                if (type.Name == "ControlBindingsCollection" && m.Parameters.Count >= 3)
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_3));
+                    if (m.Parameters.Count >= 4 && m.Parameters[3].ParameterType.FullName == "System.Boolean")
+                        il.Add(Instruction.Create(OpCodes.Ldarg_S, m.Parameters[3]));
+                    else
+                        il.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                    if (m.Parameters.Count >= 5 && m.Parameters[4].ParameterType.FullName.Contains("DataSourceUpdateMode"))
+                        il.Add(Instruction.Create(OpCodes.Ldarg_S, m.Parameters[4]));
+                    else
+                        il.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.CtrlBindingsAdd));
+                    if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                    else if (m.ReturnType.FullName != "System.Object") il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
+
+                // Generic fallback for any other Add overload
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 if (m.Parameters[0].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[0].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colAdd));
-                if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
-                else if (m.ReturnType.FullName != "System.Int32")
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColAdd));
+                if (m.ReturnType.FullName == "System.Void")
                 {
                     il.Add(Instruction.Create(OpCodes.Pop));
-                    PushDefaultValue(il, m.Body, m.ReturnType, module);
+                }
+                else if (m.ReturnType.FullName == "System.Int32")
+                {
+                    il.Add(Instruction.Create(OpCodes.Pop));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
+                    il.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+                    il.Add(Instruction.Create(OpCodes.Sub));
+                }
+                else if (m.ReturnType.FullName != "System.Object")
+                {
+                    il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
                 }
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
@@ -1672,7 +2165,7 @@ public static class StubGenerator
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, colAddRange));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColAddRange));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1682,7 +2175,7 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 if (m.Parameters[0].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[0].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colRemove));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColRemove));
                 if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
@@ -1691,14 +2184,14 @@ public static class StubGenerator
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, colRemoveAt));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColRemoveAt));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "Clear")
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Call, colClear));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColClear));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1708,7 +2201,7 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 if (m.Parameters[0].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[0].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colContains));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColContains));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1718,7 +2211,7 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 if (m.Parameters[0].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[0].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colIndexOf));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColIndexOf));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1729,26 +2222,48 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_2));
                 if (m.Parameters[1].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[1].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colInsert));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColInsert));
+                il.Add(Instruction.Create(OpCodes.Ret));
+                return;
+            }
+            if (m.Name == "CopyTo" && m.Parameters.Count == 2)
+            {
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColCopyTo));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "get_Count")
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Call, colCount));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColCount));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
-            if (m.Name == "get_Item" && m.Parameters.Count == 1 && m.Parameters[0].ParameterType.FullName == "System.Int32")
+            if (m.Name == "get_Item" && m.Parameters.Count == 1)
             {
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, colGetItem));
-                if (m.ReturnType.IsValueType) il.Add(Instruction.Create(OpCodes.Unbox_Any, m.ReturnType));
-                else il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
-                il.Add(Instruction.Create(OpCodes.Ret));
-                return;
+                if (m.Parameters[0].ParameterType.FullName == "System.Int32")
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetItem));
+                    if (m.ReturnType.IsValueType) il.Add(Instruction.Create(OpCodes.Unbox_Any, m.ReturnType));
+                    else if (m.ReturnType.FullName != "System.Object") il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
+                if (m.Parameters[0].ParameterType.FullName == "System.String")
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetItemByName));
+                    if (m.ReturnType.IsValueType) il.Add(Instruction.Create(OpCodes.Unbox_Any, m.ReturnType));
+                    else if (m.ReturnType.FullName != "System.Object") il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
             }
             if (m.Name == "set_Item" && m.Parameters.Count == 2 && m.Parameters[0].ParameterType.FullName == "System.Int32")
             {
@@ -1757,14 +2272,14 @@ public static class StubGenerator
                 il.Add(Instruction.Create(OpCodes.Ldarg_2));
                 if (m.Parameters[1].ParameterType.IsValueType)
                     il.Add(Instruction.Create(OpCodes.Box, m.Parameters[1].ParameterType));
-                il.Add(Instruction.Create(OpCodes.Call, colSetItem));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColSetItem));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "GetEnumerator")
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Call, colGetEnumerator));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetEnumerator));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1798,7 +2313,9 @@ public static class StubGenerator
             }
             if (m.Name == "CreateGraphics")
             {
-                il.Add(Instruction.Create(OpCodes.Ldnull));
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.CreateGraphics));
+                il.Add(Instruction.Create(OpCodes.Castclass, m.ReturnType));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1806,12 +2323,12 @@ public static class StubGenerator
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_1));
                 il.Add(Instruction.Create(OpCodes.Ldnull));
-                il.Add(Instruction.Create(OpCodes.Call, invokeDelegate));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.InvokeDelegate));
                 if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
                 else if (m.ReturnType.FullName != "System.Object")
                 {
                     il.Add(Instruction.Create(OpCodes.Pop));
-                    PushDefaultValue(il, m.Body, m.ReturnType, module);
+                    PushDefaultValue(il, m.Body, m.ReturnType, ctx.Module);
                 }
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
@@ -1827,19 +2344,19 @@ public static class StubGenerator
             }
             if (m.Name == "get_StartupPath")
             {
-                il.Add(Instruction.Create(OpCodes.Call, getStartup));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetStartup));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "get_ExecutablePath")
             {
-                il.Add(Instruction.Create(OpCodes.Call, getExec));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetExec));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "get_ProductVersion")
             {
-                il.Add(Instruction.Create(OpCodes.Call, getProd));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetProd));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1850,25 +2367,25 @@ public static class StubGenerator
             if (m.Name == "SetText")
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Call, setClip));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.SetClip));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "GetText")
             {
-                il.Add(Instruction.Create(OpCodes.Call, getClip));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.GetClip));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "ContainsText")
             {
-                il.Add(Instruction.Create(OpCodes.Call, hasClip));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.HasClip));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
             if (m.Name == "Clear")
             {
-                il.Add(Instruction.Create(OpCodes.Call, clrClip));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.ClrClip));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -1888,8 +2405,130 @@ public static class StubGenerator
             return;
         }
 
-        PushDefaultValue(il, m.Body, m.ReturnType, module);
+        PushDefaultValue(il, m.Body, m.ReturnType, ctx.Module);
         il.Add(Instruction.Create(OpCodes.Ret));
+    }
+
+    private static void GenerateLiveSplitView(GeneratorOptions options, AssemblyDefinition winFormsAsm, AssemblyDefinition coreAsm, AssemblyDefinition drawingAsm)
+    {
+        var asmName = new AssemblyNameDefinition("LiveSplit.View", new Version(1, 0, 0, 0));
+        var viewAsm = AssemblyDefinition.CreateAssembly(asmName, "LiveSplit.View.dll", ModuleKind.Dll);
+        var module = viewAsm.MainModule;
+
+        // Base type Form from LiveSplit.Compat.WinForms
+        var formType = winFormsAsm.MainModule.Types.FirstOrDefault(t => t.FullName == "System.Windows.Forms.Form");
+        var formRef = module.ImportReference(formType);
+        var formCtor = formType?.Methods.FirstOrDefault(m => m.IsConstructor && !m.IsStatic && m.Parameters.Count == 0);
+        var formCtorRef = formCtor != null ? module.ImportReference(formCtor) : null;
+
+        // 1. LiveSplit.View.RunEditorDialog
+        {
+            var runEditorType = new TypeDefinition("LiveSplit.View", "RunEditorDialog",
+                TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.BeforeFieldInit,
+                formRef);
+            var ctor = new MethodDefinition(".ctor",
+                MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            ctor.Body = new MethodBody(ctor);
+            if (formCtorRef != null)
+            {
+                ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Call, formCtorRef));
+            }
+            ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            runEditorType.Methods.Add(ctor);
+            module.Types.Add(runEditorType);
+        }
+
+        // 2. LiveSplit.View.ComponentSettingsDialog
+        {
+            var settingsDialogType = new TypeDefinition("LiveSplit.View", "ComponentSettingsDialog",
+                TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.BeforeFieldInit,
+                formRef);
+
+            var ctor0 = new MethodDefinition(".ctor",
+                MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            ctor0.Body = new MethodBody(ctor0);
+            if (formCtorRef != null)
+            {
+                ctor0.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                ctor0.Body.Instructions.Add(Instruction.Create(OpCodes.Call, formCtorRef));
+            }
+            ctor0.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            settingsDialogType.Methods.Add(ctor0);
+
+            var compType = coreAsm.MainModule.Types.FirstOrDefault(t => t.FullName == "LiveSplit.UI.Components.IComponent")
+                ?? module.ImportReference(typeof(object)).Resolve();
+            var compRef = module.ImportReference(compType);
+            var ctor1 = new MethodDefinition(".ctor",
+                MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            ctor1.Parameters.Add(new ParameterDefinition("component", ParameterAttributes.None, compRef));
+            ctor1.Body = new MethodBody(ctor1);
+            if (formCtorRef != null)
+            {
+                ctor1.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                ctor1.Body.Instructions.Add(Instruction.Create(OpCodes.Call, formCtorRef));
+            }
+            ctor1.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            settingsDialogType.Methods.Add(ctor1);
+
+            module.Types.Add(settingsDialogType);
+        }
+
+        // 3. LiveSplit.View.SpeedRunsLiveForm
+        {
+            var srlFormType = new TypeDefinition("LiveSplit.View", "SpeedRunsLiveForm",
+                TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.BeforeFieldInit,
+                formRef);
+            var ctor = new MethodDefinition(".ctor",
+                MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            ctor.Body = new MethodBody(ctor);
+            if (formCtorRef != null)
+            {
+                ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Call, formCtorRef));
+            }
+            ctor.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            srlFormType.Methods.Add(ctor);
+            module.Types.Add(srlFormType);
+        }
+
+        // 4. LiveSplit.Properties.Resources
+        {
+            var resType = new TypeDefinition("LiveSplit.Properties", "Resources",
+                TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
+                module.TypeSystem.Object);
+
+            var bmpType = drawingAsm.MainModule.Types.FirstOrDefault(t => t.FullName == "System.Drawing.Bitmap");
+            var bmpRef = module.ImportReference(bmpType);
+
+            void AddBitmapProp(string propName)
+            {
+                var prop = new PropertyDefinition(propName, PropertyAttributes.None, bmpRef);
+                var getter = new MethodDefinition($"get_{propName}",
+                    MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.HideBySig | MethodAttributes.SpecialName,
+                    bmpRef);
+                getter.Body = new MethodBody(getter);
+                getter.Body.Instructions.Add(Instruction.Create(OpCodes.Ldnull));
+                getter.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                resType.Methods.Add(getter);
+                prop.GetMethod = getter;
+                resType.Properties.Add(prop);
+            }
+
+            AddBitmapProp("Add");
+            AddBitmapProp("Remove");
+            AddBitmapProp("UpArrow");
+            AddBitmapProp("DownArrow");
+
+            module.Types.Add(resType);
+        }
+
+        string outViewPath = Path.Combine(options.OutDir, "LiveSplit.View.dll");
+        viewAsm.Write(outViewPath);
     }
 
     private static void PushDefaultValue(Mono.Collections.Generic.Collection<Instruction> il, MethodBody body, TypeReference retType, ModuleDefinition module)

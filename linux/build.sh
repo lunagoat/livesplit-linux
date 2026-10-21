@@ -103,7 +103,8 @@ dotnet run --project "$ROOT_DIR/linux/tools/WinFormsStubGen" -c Release -- \
     --core "$OUTPUT_DIR/LiveSplit.Core.dll" \
     --drawing "$OUTPUT_DIR/LiveSplit.Drawing.dll" \
     --out "$STUB_TMP"
-cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$OUTPUT_DIR/"
+cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$STUB_TMP/LiveSplit.View.dll" "$OUTPUT_DIR/"
+cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$STUB_TMP/LiveSplit.View.dll" "$NATIVE_DIR/"
 rm -rf "$STUB_TMP"
 
 # Ensure native libraries are present next to executable

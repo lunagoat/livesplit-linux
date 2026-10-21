@@ -67,6 +67,10 @@ public class ComponentDllsTests : IClassFixture<StubFixture>
 
         CacheTypes(stubAsm);
         CacheTypes(coreAsm);
+        if (_fixture.ViewAssembly != null)
+        {
+            CacheTypes(_fixture.ViewAssembly);
+        }
 
         int totalDlls = 0;
         int managedDlls = 0;
@@ -110,10 +114,14 @@ public class ComponentDllsTests : IClassFixture<StubFixture>
 
                     typeRefNames[handle] = fullName;
 
-                    if (fullName.StartsWith("System.Windows.Forms"))
+                    bool isWatched = fullName.StartsWith("System.Windows.Forms")
+                        || fullName.StartsWith("LiveSplit.View")
+                        || fullName == "LiveSplit.Properties.Resources";
+
+                    if (isWatched)
                     {
                         totalTypeRefs++;
-                        if (!TryResolveType(fullName, stubAsm, coreAsm, typeCache, out _))
+                        if (!TryResolveType(fullName, stubAsm, coreAsm, _fixture.ViewAssembly, typeCache, out _))
                         {
                             missingTypes.Add(fullName);
                         }
@@ -135,10 +143,15 @@ public class ComponentDllsTests : IClassFixture<StubFixture>
                         }
                     }
 
-                    if (typeFullName != null && typeFullName.StartsWith("System.Windows.Forms"))
+                    bool isWatched = typeFullName != null && (
+                        typeFullName.StartsWith("System.Windows.Forms")
+                        || typeFullName.StartsWith("LiveSplit.View")
+                        || typeFullName == "LiveSplit.Properties.Resources");
+
+                    if (isWatched)
                     {
                         totalMemberRefs++;
-                        if (TryResolveType(typeFullName, stubAsm, coreAsm, typeCache, out var targetType))
+                        if (TryResolveType(typeFullName!, stubAsm, coreAsm, _fixture.ViewAssembly, typeCache, out var targetType))
                         {
                             if (!MemberExists(targetType, memberName))
                             {
@@ -179,7 +192,7 @@ public class ComponentDllsTests : IClassFixture<StubFixture>
         Assert.True(missingMembers.Count == 0, $"Found {missingMembers.Count} missing WinForms members in component DLLs.");
     }
 
-    private static bool TryResolveType(string fullName, Assembly stubAsm, Assembly coreAsm, Dictionary<string, Type> typeCache, out Type targetType)
+    private static bool TryResolveType(string fullName, Assembly stubAsm, Assembly coreAsm, Assembly? viewAsm, Dictionary<string, Type> typeCache, out Type targetType)
     {
         if (typeCache.TryGetValue(fullName, out targetType!)) return true;
         string plusName = fullName.Replace('/', '+');
@@ -188,12 +201,14 @@ public class ComponentDllsTests : IClassFixture<StubFixture>
         try
         {
             targetType = stubAsm.GetType(fullName) ?? stubAsm.GetType(plusName)
-                ?? coreAsm.GetType(fullName) ?? coreAsm.GetType(plusName)!;
+                ?? coreAsm.GetType(fullName) ?? coreAsm.GetType(plusName)
+                ?? (viewAsm?.GetType(fullName) ?? viewAsm?.GetType(plusName))!;
         }
         catch (TypeLoadException)
         {
             targetType = stubAsm.DefinedTypes.FirstOrDefault(t => t.FullName == fullName || t.FullName == plusName)
-                ?? coreAsm.DefinedTypes.FirstOrDefault(t => t.FullName == fullName || t.FullName == plusName)!;
+                ?? coreAsm.DefinedTypes.FirstOrDefault(t => t.FullName == fullName || t.FullName == plusName)
+                ?? (viewAsm?.DefinedTypes.FirstOrDefault(t => t.FullName == fullName || t.FullName == plusName))!;
         }
 
         if (targetType != null)
