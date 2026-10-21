@@ -8,7 +8,12 @@
     <NoWarn>$(NoWarn);CA1416;CS0618;NU1701</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="$(HeadlessVersion)" />
     <ProjectReference Include="../LiveSplit.App/LiveSplit.App.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Racetime/src/LiveSplit.Racetime/LiveSplit.Racetime.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.TheRun/src/LiveSplit.TheRun/LiveSplit.TheRun.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.ScriptableAutoSplit/src/LiveSplit.ScriptableAutoSplit/LiveSplit.ScriptableAutoSplit.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.AutoSplittingRuntime/src/LiveSplit.AutoSplittingRuntime/LiveSplit.AutoSplittingRuntime.csproj" />
     <PackageReference Include="Avalonia.Headless" Version="$(HeadlessVersion)" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="$(HeadlessVersion)" />
     <PackageReference Include="Avalonia.Skia" Version="$(HeadlessVersion)" />
@@ -16,6 +21,8 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <None Include="Samples/*.lss" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RootPath)/linux/native/libasr_capi.so" Link="libasr_capi.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(RootPath)/linux/native/libasr_capi.so')" />
+    <None Include="$(RootPath)/linux/native/liblivesplit_core.so" Link="liblivesplit_core.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(RootPath)/linux/native/liblivesplit_core.so')" />
   </ItemGroup>
   <Target Name="CopyComponents" AfterTargets="Build">
     <ItemGroup><ComponentDll Include="$(ArtifactsPath)/build/Components/*.dll" /></ItemGroup>

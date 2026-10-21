@@ -1,11 +1,8 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
-#if !DESKTOP_RENDER
-using Avalonia.Headless;
-#endif
+using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LiveSplit.Controls.Settings;
@@ -111,68 +108,52 @@ public sealed class SettingsViewsMust
         Assert.Throws<ArgumentException>(() => registry.Create(new object(), LayoutMode.Vertical));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void ComponentSettingsViewsCreatesFallback()
     {
         var fallback = ComponentSettingsViews.Create(null, LayoutMode.Vertical);
         Assert.IsType<TextBlock>(fallback);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void RenderEveryPageAndExerciseBindings()
     {
-        Exception error = null;
-        var thread = new Thread(() =>
+        string scratchDir = "/tmp/claude-1000/-home-luna/a784986e-7ae8-4c15-85c3-9d4e4bec4cf4/scratchpad/ui-compsettings";
+        string output = Environment.GetEnvironmentVariable("LS_SETTINGS_TEST_OUT")
+            ?? (Directory.Exists(scratchDir) ? scratchDir : "/tmp/livesplit-settings-views");
+        Directory.CreateDirectory(output);
+        var registry = Registry.Default;
+        foreach (var type in registry.SettingsTypes.Where(t => t.Name != "ColumnSettings" && t.Name != "SoundFileSettings" && t.Name != "SoundVolumeSettings"))
         {
+            object model = type.GetConstructor(Type.EmptyTypes) != null ? Activator.CreateInstance(type) : Activator.CreateInstance(type, new object[] { null });
             try
             {
-#if DESKTOP_RENDER
-                AppBuilder.Configure<TestApplication>().UsePlatformDetect().SetupWithoutStarting();
-#else
-                AppBuilder.Configure<TestApplication>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
-#endif
-                string scratchDir = "/tmp/claude-1000/-home-luna/a784986e-7ae8-4c15-85c3-9d4e4bec4cf4/scratchpad/ui-compsettings";
-                string output = Environment.GetEnvironmentVariable("LS_SETTINGS_TEST_OUT")
-                    ?? (Directory.Exists(scratchDir) ? scratchDir : "/tmp/livesplit-settings-views");
-                Directory.CreateDirectory(output);
-                var registry = Registry.Default;
-                foreach (var type in registry.SettingsTypes.Where(t => t.Name != "ColumnSettings" && t.Name != "SoundFileSettings" && t.Name != "SoundVolumeSettings"))
+                var view = registry.Create(model, LayoutMode.Vertical);
+                string name = type.Assembly.GetName().Name.Replace("LiveSplit.", "");
+                Render(view, Path.Combine(output, name + ".png"));
+                if (name == "Sound")
                 {
-                    object model = type.GetConstructor(Type.EmptyTypes) != null ? Activator.CreateInstance(type) : Activator.CreateInstance(type, new object[] { null });
-                    try
-                    {
-                        var view = registry.Create(model, LayoutMode.Vertical);
-                        string name = type.Assembly.GetName().Name.Replace("LiveSplit.", "");
-                        Render(view, Path.Combine(output, name + ".png"));
-                        if (name == "Sound")
-                        {
-                            var tabs = view.GetVisualDescendants().OfType<TabControl>().Single();
-                            tabs.SelectedIndex = 1;
-                            Render(view, Path.Combine(output, "Sound-Volume.png"));
-                        }
-                        ExerciseCommonBindings(model, view);
-                        if (name is "Splits" or "Subsplits") ExerciseColumns(model);
-                        registry.Create(model, LayoutMode.Horizontal);
-                        if (model.GetType().GetProperty("Display2RowsShown") != null)
-                            Assert.True((bool)model.GetType().GetProperty("Display2RowsShown").GetValue(model));
-                    }
-                    finally { (model as IDisposable)?.Dispose(); }
+                    var tabs = view.GetVisualDescendants().OfType<TabControl>().Single();
+                    tabs.SelectedIndex = 1;
+                    Render(view, Path.Combine(output, "Sound-Volume.png"));
                 }
-                RenderWindow(new ColorPickerDialog(System.Drawing.Color.FromArgb(100, 51, 115, 244)), Path.Combine(output, "ColorPicker.png"));
-                RenderWindow(new FontPickerDialog(new System.Drawing.Font("DejaVu Sans", 13, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel)), Path.Combine(output, "FontPicker.png"));
-
-                var mock = new MockComponent();
-                var dialog = new ComponentSettingsDialog(mock);
-                dialog.Close();
-                Dispatcher.UIThread.RunJobs();
-                Assert.True(mock.WasRestored);
-                Assert.Equal("Original", mock.SavedSettings.InnerText);
+                ExerciseCommonBindings(model, view);
+                if (name is "Splits" or "Subsplits") ExerciseColumns(model);
+                registry.Create(model, LayoutMode.Horizontal);
+                if (model.GetType().GetProperty("Display2RowsShown") != null)
+                    Assert.True((bool)model.GetType().GetProperty("Display2RowsShown").GetValue(model));
             }
-            catch (Exception ex) { error = ex; }
-        });
-        thread.Start();
-        thread.Join();
-        if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+            finally { (model as IDisposable)?.Dispose(); }
+        }
+        RenderWindow(new ColorPickerDialog(System.Drawing.Color.FromArgb(100, 51, 115, 244)), Path.Combine(output, "ColorPicker.png"));
+        RenderWindow(new FontPickerDialog(new System.Drawing.Font("DejaVu Sans", 13, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel)), Path.Combine(output, "FontPicker.png"));
+
+        var mock = new MockComponent();
+        var dialog = new ComponentSettingsDialog(mock);
+        dialog.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(mock.WasRestored);
+        Assert.Equal("Original", mock.SavedSettings.InnerText);
     }
 
     private static void Render(Control view, string path)
@@ -232,11 +213,6 @@ public sealed class SettingsViewsMust
         column.GetType().GetMethod("Remove").Invoke(column, null);
         Assert.Equal(before, list.Count);
     }
-}
-
-public sealed class TestApplication : Application
-{
-    public override void Initialize() { Styles.Add(new FluentTheme()); RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark; }
 }
 
 internal sealed class MockComponent : IComponent

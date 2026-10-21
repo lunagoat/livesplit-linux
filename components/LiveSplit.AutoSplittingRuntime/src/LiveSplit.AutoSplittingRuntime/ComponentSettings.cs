@@ -1,4 +1,4 @@
-﻿using LiveSplit.Model;
+﻿﻿using LiveSplit.Model;
 using LiveSplit.Options;
 using LiveSplit.UI;
 using System;
@@ -52,16 +52,14 @@ public class ComponentSettings : SettingsBase
     private readonly Action resumeGameTime;
     private readonly SetCustomVariableDelegate setCustomVariable;
 
+    public ComponentSettings() : this(null) { }
+
     public ComponentSettings(TimerModel model)
     {
-
-
         scriptPath = "";
-
-
-
         getState = () =>
         {
+            if (model?.CurrentState == null) return 0;
             return model.CurrentState.CurrentPhase switch
             {
                 TimerPhase.NotRunning => 0,
@@ -71,29 +69,28 @@ public class ComponentSettings : SettingsBase
                 _ => 0,
             };
         };
-        getIndex = () => model.CurrentState.CurrentSplitIndex;
+        getIndex = () => model?.CurrentState?.CurrentSplitIndex ?? 0;
         segmentSplitted = (idx) =>
         {
-            if (!(0 <= idx && idx < model.CurrentState.CurrentSplitIndex))
+            if (model?.CurrentState == null || !(0 <= idx && idx < model.CurrentState.CurrentSplitIndex))
             {
                 return -1;
             }
-
             return model.CurrentState.Run[idx].SplitTime.RealTime != null ? 1 : 0;
         };
-        start = model.Start;
-        split = model.Split;
-        skipSplit = model.SkipSplit;
-        undoSplit = model.UndoSplit;
-        reset = model.Reset;
-        setGameTime = (ticks) => model.CurrentState.SetGameTime(new TimeSpan(ticks));
-        pauseGameTime = () => model.CurrentState.IsGameTimePaused = true;
-        resumeGameTime = () => model.CurrentState.IsGameTimePaused = false;
+        start = model != null ? model.Start : () => { };
+        split = model != null ? model.Split : () => { };
+        skipSplit = model != null ? model.SkipSplit : () => { };
+        undoSplit = model != null ? model.UndoSplit : () => { };
+        reset = model != null ? model.Reset : () => { };
+        setGameTime = (ticks) => { if (model?.CurrentState != null) model.CurrentState.SetGameTime(new TimeSpan(ticks)); };
+        pauseGameTime = () => { if (model?.CurrentState != null) model.CurrentState.IsGameTimePaused = true; };
+        resumeGameTime = () => { if (model?.CurrentState != null) model.CurrentState.IsGameTimePaused = false; };
         setCustomVariable = (namePtr, nameLen, valuePtr, valueLen) =>
         {
             string name = ASRString.FromPtrLen(namePtr, nameLen);
             string value = ASRString.FromPtrLen(valuePtr, valueLen);
-            model.CurrentState.Run.Metadata.SetCustomVariable(name, value);
+            model?.CurrentState?.Run?.Metadata?.SetCustomVariable(name, value);
         };
     }
 

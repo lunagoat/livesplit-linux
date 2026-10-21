@@ -1,4 +1,4 @@
-using LiveSplit.Model;
+﻿using LiveSplit.Model;
 using LiveSplit.Model.Comparisons;
 using LiveSplit.Model.RunFactories;
 using LiveSplit.View.RunEditor;
@@ -11,6 +11,11 @@ namespace LiveSplit.AppTests;
 
 public class RunEditorMust
 {
+    static RunEditorMust()
+    {
+        LiveSplitCoreFactory.LoadLiveSplitCore();
+    }
+
     internal static IRun CreateRun()
     {
         var run = new Run(new StandardComparisonGeneratorsFactory());

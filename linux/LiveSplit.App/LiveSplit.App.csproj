@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -34,6 +34,7 @@
     carry a [ComponentFactory] attribute (use that for statically linked components).
   -->
   <ItemGroup Label="Components">
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.AutoSplittingRuntime/src/LiveSplit.AutoSplittingRuntime/LiveSplit.AutoSplittingRuntime.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Counter/src/LiveSplit.Counter/LiveSplit.Counter.csproj" />
@@ -45,12 +46,15 @@
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.ManualGameTime/src/LiveSplit.ManualGameTime/LiveSplit.ManualGameTime.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Racetime/src/LiveSplit.Racetime/LiveSplit.Racetime.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.ScriptableAutoSplit/src/LiveSplit.ScriptableAutoSplit/LiveSplit.ScriptableAutoSplit.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Sound/src/LiveSplit.Sound/LiveSplit.Sound.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Subsplits/src/LiveSplit.Subsplits/LiveSplit.Subsplits.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.SumOfBest/src/LiveSplit.SumOfBest/LiveSplit.SumOfBest.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.TheRun/src/LiveSplit.TheRun/LiveSplit.TheRun.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
     <ComponentProject Include="$(ComponentsPath)/LiveSplit.TotalPlaytime/src/LiveSplit.TotalPlaytime/LiveSplit.TotalPlaytime.csproj" />
@@ -64,6 +68,8 @@
 
   <ItemGroup>
     <None Include="$(ResourcesPath)/Icon.png" Link="Resources/Icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RootPath)/linux/native/libasr_capi.so" Link="libasr_capi.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(RootPath)/linux/native/libasr_capi.so')" />
+    <None Include="$(RootPath)/linux/native/liblivesplit_core.so" Link="liblivesplit_core.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(RootPath)/linux/native/liblivesplit_core.so')" />
     <EmbeddedResource Include="$(SrcPath)/LiveSplit.View/Resources/DefaultLayout.lsl" LogicalName="DefaultLayout.lsl" />
     <AvaloniaResource Include="$(ResourcesPath)/Icon.png" Link="Assets/Icon.png" />
     <Content Include="$(SrcPath)/LiveSplit.Core/Localization/Locales/*.json" Link="Localization/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

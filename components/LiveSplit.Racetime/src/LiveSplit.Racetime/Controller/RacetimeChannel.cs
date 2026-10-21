@@ -480,9 +480,19 @@ public class RacetimeChannel
 
     public void RemoveRaceComparisons()
     {
+        if (Model?.CurrentState == null)
+        {
+            return;
+        }
+
         if (RacetimeComparisonGenerator.IsRaceComparison(Model.CurrentState.CurrentComparison))
         {
             Model.CurrentState.CurrentComparison = Run.PersonalBestComparisonName;
+        }
+
+        if (Model.CurrentState.Run == null)
+        {
+            return;
         }
 
         for (int ind = 0; ind < Model.CurrentState.Run.ComparisonGenerators.Count; ind++)

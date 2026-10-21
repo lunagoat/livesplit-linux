@@ -25,6 +25,6 @@ internal class RacetimeComparisonGenerator : IComparisonGenerator
 
     public static bool IsRaceComparison(string comparison)
     {
-        return comparison.StartsWith("[Race] ");
+        return comparison != null && comparison.StartsWith("[Race] ");
     }
 }

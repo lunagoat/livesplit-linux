@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using LiveSplit.Services;
 using LiveSplit.UI;
 using System;
@@ -58,6 +58,11 @@ public sealed class Registry : IComponentSettingsViewFactory
         Add("Sound", "SoundFileSettings", m => new SoundFileView(m));
         Add("Sound", "SoundVolumeSettings", m => new SoundVolumeView(m));
         Add("Video", "VideoSettings", m => new VideoView(m), "LiveSplit.Video");
+        Add("AutoSplittingRuntime", "ComponentSettings", m => new AutoSplittingRuntimeView(m), "LiveSplit.AutoSplittingRuntime");
+        Add("ScriptableAutoSplit", "ComponentSettings", m => new ScriptableAutoSplitView(m));
+        Add("TheRun", "CollectorSettings", m => new TheRunView(m));
+        Add("Racetime", "RacetimeSettingsControl", m => new RacetimeSettingsView(m), "LiveSplit.Racetime");
+        Add("Racetime", "RacetimeSettings", m => new RacetimeSettingsView(m), "LiveSplit.Racetime");
         ComponentAssemblies = assemblies;
     }
 

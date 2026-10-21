@@ -27,5 +27,5 @@ GitInfo/
 LiveSplit.AutoSplitters.xml
 
 # Linux port
-linux/native/
+linux/native
 *.so

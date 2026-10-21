@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -147,6 +147,7 @@ public partial class MainWindow : Window, IFormHost
 
         ComponentCatalog.Initialize();
         ComponentCatalog.InitializeRaceProviders();
+        RacetimeIntegration.Initialize();
 
         CurrentState = new LiveSplitState(null, this, null, null, null);
 
