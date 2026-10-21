@@ -37,6 +37,7 @@ public class ComponentActivationMust
         string dll = Path.Combine(source, "LiveSplit.Fake.dll");
         File.WriteAllText(dll, "not an assembly");
 
+        ComponentManager.RaceProviderFactories ??= new System.Collections.Generic.Dictionary<string, IRaceProviderFactory>();
         var run = new Run(new StandardComparisonGeneratorsFactory());
         run.Add(new Segment("Split"));
         var state = new LiveSplitState(run, null, new Layout(), new LayoutSettings(), new StandardSettingsFactory().Create());

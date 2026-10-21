@@ -1,5 +1,6 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Hosting;
+using LiveSplit.Options;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -73,7 +74,10 @@ public class ComponentManager
                     Invoke(null);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log.Error(ex);
+        }
 
         return factory;
     }
@@ -81,6 +85,11 @@ public class ComponentManager
     private static Assembly LoadComponentAssembly(string path)
     {
         string fullPath = Path.GetFullPath(path);
+        if (LiveSplit.Compat.LegacyComponentLoader.IsLegacy(fullPath))
+        {
+            return LiveSplit.Compat.LegacyComponentLoader.Load(fullPath);
+        }
+
         AssemblyName name = AssemblyName.GetAssemblyName(fullPath);
         return AssemblyLoadContext.Default.Assemblies.FirstOrDefault(x => AssemblyName.ReferenceMatchesDefinition(x.GetName(), name))
             ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);

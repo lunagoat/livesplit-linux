@@ -75,6 +75,37 @@ dotnet publish "$ROOT_DIR/linux/LiveSplit.App/LiveSplit.App.csproj" \
     $SC_FLAG \
     -o "$OUTPUT_DIR"
 
+# Windows auto-splitter compatibility: Win32 shim (.so) + generated WinForms stub assembly.
+if [ "$SKIP_NATIVE" -eq 0 ] || [ ! -f "$NATIVE_DIR/libwin32shim.so" ]; then
+    echo "==> Building libwin32shim.so..."
+    (cd "$ROOT_DIR/linux/win32shim" && cargo build --release)
+    cp -f "$ROOT_DIR/linux/win32shim/target/release/libwin32shim.so" "$NATIVE_DIR/libwin32shim.so"
+fi
+cp -f "$NATIVE_DIR/libwin32shim.so" "$OUTPUT_DIR/"
+
+WINFORMS_REF_VERSION="10.0.13"
+REF_DIR="$NATIVE_DIR/winforms-ref"
+if [ ! -f "$REF_DIR/System.Windows.Forms.dll" ]; then
+    echo "==> Fetching WinForms reference assemblies ($WINFORMS_REF_VERSION)..."
+    mkdir -p "$REF_DIR"
+    REF_TMP="$(mktemp -d)"
+    curl -fsSL -o "$REF_TMP/ref.nupkg" \
+        "https://api.nuget.org/v3-flatcontainer/microsoft.windowsdesktop.app.ref/$WINFORMS_REF_VERSION/microsoft.windowsdesktop.app.ref.$WINFORMS_REF_VERSION.nupkg"
+    unzip -q -o -j "$REF_TMP/ref.nupkg" \
+        'ref/net10.0/System.Windows.Forms.dll' 'ref/net10.0/System.Windows.Forms.Primitives.dll' 'ref/net10.0/System.Drawing.Common.dll' \
+        -d "$REF_DIR"
+    rm -rf "$REF_TMP"
+fi
+echo "==> Generating LiveSplit.Compat.WinForms stub..."
+STUB_TMP="$(mktemp -d)"
+dotnet run --project "$ROOT_DIR/linux/tools/WinFormsStubGen" -c Release -- \
+    --ref-dir "$REF_DIR" \
+    --core "$OUTPUT_DIR/LiveSplit.Core.dll" \
+    --drawing "$OUTPUT_DIR/LiveSplit.Drawing.dll" \
+    --out "$STUB_TMP"
+cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$OUTPUT_DIR/"
+rm -rf "$STUB_TMP"
+
 # Ensure native libraries are present next to executable
 cp -f "$NATIVE_DIR/liblivesplit_core.so" "$OUTPUT_DIR/"
 cp -f "$NATIVE_DIR/libasr_capi.so" "$OUTPUT_DIR/"

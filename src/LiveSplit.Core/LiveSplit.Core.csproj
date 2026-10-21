@@ -22,6 +22,7 @@
     <PackageReference Include="Codaxy.Xlio" Version="1.0.0" />
     <PackageReference Include="GitInfo" Version="3.6.0" PrivateAssets="all" />
     <PackageReference Include="IrcDotNet" Version="0.7.0" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <PackageReference Include="PolySharp" Version="1.16.0" PrivateAssets="all" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
     <PackageReference Include="System.Formats.Nrbf" Version="10.0.8" />
