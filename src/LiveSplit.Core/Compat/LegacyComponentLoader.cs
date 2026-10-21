@@ -242,7 +242,7 @@ public static class LegacyComponentLoader
             foreach (MethodDefinition method in type.Methods)
             {
                 // Settings controls are toolkit-neutral objects in this port.
-                if (method.Name == "GetSettingsControl" && method.ReturnType.FullName.StartsWith("System.Windows.Forms.", StringComparison.Ordinal))
+                if (method.Name == "GetSettingsControl" && IsSettingsControlSignature(method))
                 {
                     method.ReturnType = types.Object;
                 }
@@ -259,6 +259,18 @@ public static class LegacyComponentLoader
         using var output = new MemoryStream();
         module.Write(output);
         return output.ToArray();
+    }
+
+    // GetSettingsControl(LayoutMode) returned a WinForms Control (often a component-specific
+    // UserControl subclass); the host's version returns object.
+    private static bool IsSettingsControlSignature(MethodDefinition method)
+    {
+        if (method.ReturnType.IsValueType || method.ReturnType.FullName is "System.Object" or "System.Void")
+        {
+            return false;
+        }
+
+        return method.Parameters.Count == 1 && method.Parameters[0].ParameterType.FullName == "LiveSplit.UI.LayoutMode";
     }
 
     private static AssemblyNameReference Ref2(Dictionary<string, AssemblyNameReference> created, ModuleDefinition module, AssemblyName name)
@@ -290,6 +302,14 @@ public static class LegacyComponentLoader
         ILProcessor il = method.Body.GetILProcessor();
         foreach (Instruction instruction in method.Body.Instructions.ToList())
         {
+            if (instruction.OpCode == OpCodes.Isinst && instruction.Operand is TypeReference isinstType
+                && isinstType.FullName == "System.Windows.Forms.WindowsFormsSynchronizationContext")
+            {
+                instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.AsUiSynchronizationContext)));
+                instruction.OpCode = OpCodes.Call;
+                continue;
+            }
+
             if (instruction.Operand is not MethodReference target)
             {
                 continue;
@@ -308,6 +328,13 @@ public static class LegacyComponentLoader
             if (owner == "System.Diagnostics.Process" && target.Name == "get_Handle")
             {
                 instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.GetProcessHandle)));
+                instruction.OpCode = OpCodes.Call;
+                continue;
+            }
+
+            if (owner == "System.Threading.Thread" && target.Name == "Abort" && target.Parameters.Count == 0)
+            {
+                instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.AbortThread)));
                 instruction.OpCode = OpCodes.Call;
                 continue;
             }

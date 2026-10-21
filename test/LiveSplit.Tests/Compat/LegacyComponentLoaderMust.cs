@@ -153,6 +153,41 @@ public class LegacyComponentLoaderMust
         }
     }
 
+    [Fact]
+    public void DecodeBinaryFormatterBitmapsFromResources()
+    {
+        using var source = new System.Drawing.Bitmap(3, 2);
+        using (var g = System.Drawing.Graphics.FromImage(source))
+        {
+            g.Clear(System.Drawing.Color.Red);
+        }
+
+        byte[] blob = System.Drawing.LegacySerialization.SerializeImage(source);
+
+        var buffer = new MemoryStream();
+        using (var writer = new System.Resources.ResourceWriter(buffer))
+        {
+            writer.AddResourceData("icon", "System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", blob);
+            writer.AddResourceData("other", "System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a", [1, 2, 3]);
+            writer.Generate();
+        }
+
+        var image = LegacyCompat.ReadSerializedImage(new MemoryStream(buffer.ToArray()), "icon") as System.Drawing.Image;
+        Assert.NotNull(image);
+        Assert.Equal(3, image.Width);
+        Assert.Equal(2, image.Height);
+        Assert.Null(LegacyCompat.ReadSerializedImage(new MemoryStream(buffer.ToArray()), "other"));
+    }
+
+    [Fact]
+    public void FindTheAssemblyBehindAResourceManager()
+    {
+        var manager = new System.Resources.ResourceManager("LiveSplit.Tests.Missing", typeof(LegacyComponentLoaderMust).Assembly);
+        System.Reflection.FieldInfo field = typeof(System.Resources.ResourceManager).GetField("MainAssembly", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        Assert.NotNull(field);
+        Assert.Same(typeof(LegacyComponentLoaderMust).Assembly, field.GetValue(manager));
+    }
+
     private static string FindDll(string name) =>
         string.IsNullOrEmpty(DllDirectory) || !Directory.Exists(DllDirectory)
             ? null
@@ -291,8 +326,9 @@ public class LegacyComponentLoaderMust
             catch (Exception ex)
             {
                 Exception e = ex is System.Reflection.TargetInvocationException { InnerException: not null } t ? t.InnerException : ex;
-                string first = e.StackTrace?.Split('\n').FirstOrDefault()?.Trim();
-                result = $"FAIL\t{rel}\t{stage}\t{e.GetType().Name}: {e.Message.Split('\n')[0]}\t{first}";
+                string frames = string.Join(" <- ", (e.StackTrace ?? string.Empty).Split('\n').Select(f => f.Trim()).Where(f => f.Length > 0).Take(6).Select(f => f.StartsWith("at ") ? f[3..] : f));
+                string inner = e.InnerException == null ? string.Empty : $" [inner {e.InnerException.GetType().Name}: {e.InnerException.Message.Split('\n')[0]}]";
+                result = $"FAIL\t{rel}\t{stage}\t{e.GetType().Name}: {e.Message.Split('\n')[0]}{inner}\t{frames}";
             }
 
             File.AppendAllText(report, result + "\n");
