@@ -25,3 +25,7 @@ GitInfo/
 **/x86/target/
 
 LiveSplit.AutoSplitters.xml
+
+# Linux port
+linux/native/
+*.so

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -9,8 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Web;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
 namespace SpeedrunComSharp;
 
@@ -37,13 +36,59 @@ internal static class JSON
 
     public static dynamic FromString(string value)
     {
-        var serializer = new JavaScriptSerializer()
+        if (string.IsNullOrWhiteSpace(value))
         {
-            MaxJsonLength = int.MaxValue
-        };
-        serializer.RegisterConverters([new DynamicJsonConverter()]);
+            return null;
+        }
 
-        return serializer.Deserialize<object>(value);
+        using var document = JsonDocument.Parse(value);
+        object parsed = Convert(document.RootElement);
+        return parsed is IDictionary<string, object> dictionary ? new DynamicJsonObject(dictionary) : parsed;
+    }
+
+    // Mirrors the shapes JavaScriptSerializer produced: objects as dictionaries, arrays as ArrayList,
+    // integers as int/long, fractional numbers as decimal (double when out of range).
+    private static object Convert(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var dictionary = new Dictionary<string, object>();
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    dictionary[property.Name] = Convert(property.Value);
+                }
+
+                return dictionary;
+            case JsonValueKind.Array:
+                var list = new ArrayList();
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    list.Add(Convert(item));
+                }
+
+                return list;
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                if (element.TryGetInt32(out int i))
+                {
+                    return i;
+                }
+
+                if (element.TryGetInt64(out long l))
+                {
+                    return l;
+                }
+
+                return element.TryGetDecimal(out decimal m) ? m : element.GetDouble();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            default:
+                return null;
+        }
     }
 
     public static dynamic FromUri(Uri uri, string userAgent, string accessToken, TimeSpan timeout)
@@ -62,7 +107,44 @@ internal static class JSON
 
     public static string Escape(string value)
     {
-        return HttpUtility.JavaScriptStringEncode(value);
+        return JavaScriptStringEncode(value);
+    }
+
+    public static string JavaScriptStringEncode(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "";
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\': builder.Append("\\\\"); break;
+                case '"': builder.Append("\\\""); break;
+                case '\'': builder.Append("\\u0027"); break;
+                case '\b': builder.Append("\\b"); break;
+                case '\t': builder.Append("\\t"); break;
+                case '\n': builder.Append("\\n"); break;
+                case '\f': builder.Append("\\f"); break;
+                case '\r': builder.Append("\\r"); break;
+                default:
+                    if (c < ' ' || c == '<' || c == '>' || c == '&')
+                    {
+                        builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        builder.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     public static dynamic FromUriPost(Uri uri, string userAgent, string accessToken, TimeSpan timeout, string postBody)
@@ -85,26 +167,6 @@ internal static class JSON
 
         return FromResponse(response);
     }
-}
-
-public sealed class DynamicJsonConverter : JavaScriptConverter
-{
-    public override object Deserialize(IDictionary<string, object> dictionary, Type type, JavaScriptSerializer serializer)
-    {
-        if (dictionary == null)
-        {
-            throw new ArgumentNullException("dictionary");
-        }
-
-        return type == typeof(object) ? new DynamicJsonObject(dictionary) : null;
-    }
-
-    public override IDictionary<string, object> Serialize(object obj, JavaScriptSerializer serializer)
-    {
-        throw new NotImplementedException();
-    }
-
-    public override IEnumerable<Type> SupportedTypes => new ReadOnlyCollection<Type>([typeof(object)]);
 }
 
 public sealed class DynamicJsonObject : DynamicObject
@@ -150,7 +212,7 @@ public sealed class DynamicJsonObject : DynamicObject
             string name = pair.Key;
             if (value is IEnumerable<object> array)
             {
-                sb.Append("\"" + HttpUtility.JavaScriptStringEncode(name) + "\": [\r\n");
+                sb.Append("\"" + JSON.JavaScriptStringEncode(name) + "\": [\r\n");
                 bool firstInArray = true;
                 foreach (object arrayValue in array)
                 {
@@ -172,27 +234,27 @@ public sealed class DynamicJsonObject : DynamicObject
                     }
                     else if (arrayValue is string str)
                     {
-                        sb.AppendFormat("\"{0}\"", HttpUtility.JavaScriptStringEncode(str));
+                        sb.AppendFormat("\"{0}\"", JSON.JavaScriptStringEncode(str));
                     }
                     else if (arrayValue is bool b)
                     {
-                        sb.AppendFormat("{0}", HttpUtility.JavaScriptStringEncode(b.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()));
+                        sb.AppendFormat("{0}", JSON.JavaScriptStringEncode(b.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()));
                     }
                     else if (arrayValue is int i)
                     {
-                        sb.AppendFormat("{0}", HttpUtility.JavaScriptStringEncode(i.ToString(CultureInfo.InvariantCulture)));
+                        sb.AppendFormat("{0}", JSON.JavaScriptStringEncode(i.ToString(CultureInfo.InvariantCulture)));
                     }
                     else if (arrayValue is double d)
                     {
-                        sb.AppendFormat("{0}", HttpUtility.JavaScriptStringEncode(d.ToString(CultureInfo.InvariantCulture)));
+                        sb.AppendFormat("{0}", JSON.JavaScriptStringEncode(d.ToString(CultureInfo.InvariantCulture)));
                     }
                     else if (arrayValue is decimal m)
                     {
-                        sb.AppendFormat("{0}", HttpUtility.JavaScriptStringEncode(m.ToString(CultureInfo.InvariantCulture)));
+                        sb.AppendFormat("{0}", JSON.JavaScriptStringEncode(m.ToString(CultureInfo.InvariantCulture)));
                     }
                     else
                     {
-                        sb.AppendFormat("\"{0}\"", HttpUtility.JavaScriptStringEncode((arrayValue ?? "").ToString()));
+                        sb.AppendFormat("\"{0}\"", JSON.JavaScriptStringEncode((arrayValue ?? "").ToString()));
                     }
                 }
 
@@ -202,37 +264,37 @@ public sealed class DynamicJsonObject : DynamicObject
             }
             else if (value is IDictionary<string, object> dict)
             {
-                sb.Append("\"" + HttpUtility.JavaScriptStringEncode(name) + "\": {\r\n");
+                sb.Append("\"" + JSON.JavaScriptStringEncode(name) + "\": {\r\n");
                 new DynamicJsonObject(dict).ToString(sb, depth + 1);
             }
             else if (value is DynamicJsonObject obj)
             {
-                sb.Append("\"" + HttpUtility.JavaScriptStringEncode(name) + "\": {\r\n");
+                sb.Append("\"" + JSON.JavaScriptStringEncode(name) + "\": {\r\n");
                 obj.ToString(sb, depth + 1);
             }
             else if (value is string str)
             {
-                sb.AppendFormat("\"{0}\": \"{1}\"", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode(str));
+                sb.AppendFormat("\"{0}\": \"{1}\"", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode(str));
             }
             else if (value is bool b)
             {
-                sb.AppendFormat("\"{0}\": {1}", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode(b.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()));
+                sb.AppendFormat("\"{0}\": {1}", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode(b.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()));
             }
             else if (value is int i)
             {
-                sb.AppendFormat("\"{0}\": {1}", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode(i.ToString(CultureInfo.InvariantCulture)));
+                sb.AppendFormat("\"{0}\": {1}", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode(i.ToString(CultureInfo.InvariantCulture)));
             }
             else if (value is double d)
             {
-                sb.AppendFormat("\"{0}\": {1}", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode(d.ToString(CultureInfo.InvariantCulture)));
+                sb.AppendFormat("\"{0}\": {1}", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode(d.ToString(CultureInfo.InvariantCulture)));
             }
             else if (value is decimal m)
             {
-                sb.AppendFormat("\"{0}\": {1}", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode(m.ToString(CultureInfo.InvariantCulture)));
+                sb.AppendFormat("\"{0}\": {1}", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode(m.ToString(CultureInfo.InvariantCulture)));
             }
             else
             {
-                sb.AppendFormat("\"{0}\": \"{1}\"", HttpUtility.JavaScriptStringEncode(name), HttpUtility.JavaScriptStringEncode((value ?? "").ToString()));
+                sb.AppendFormat("\"{0}\": \"{1}\"", JSON.JavaScriptStringEncode(name), JSON.JavaScriptStringEncode((value ?? "").ToString()));
             }
         }
 
