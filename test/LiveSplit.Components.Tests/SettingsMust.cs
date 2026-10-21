@@ -194,6 +194,11 @@ public class SettingsMust
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
+        [typeof(DeltaSettings)],
+        [typeof(ComparisonTimeSettings)],
+        [typeof(CurrentComparisonSettings)],
+        [typeof(PreviousSegmentSettings)],
+        [typeof(PossibleTimeSaveSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>
