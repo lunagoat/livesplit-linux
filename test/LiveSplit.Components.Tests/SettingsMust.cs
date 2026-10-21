@@ -209,6 +209,9 @@ public class SettingsMust
         [typeof(RunPredictionSettings)],
         [typeof(TotalPlaytimeSettings)],
         [typeof(WorldRecordSettings)],
+        [typeof(CounterComponentSettings)],
+        [typeof(HotkeyIndicatorSettings)],
+        [typeof(ManualGameTimeSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>
@@ -218,6 +221,7 @@ public class SettingsMust
     {
         var settings = type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
         var settings = type == typeof(Subsplits::LiveSplit.UI.Components.SplitsSettings) ? new Subsplits::LiveSplit.UI.Components.SplitsSettings(TestSupport.CreateState()) : type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
+        using var disposable = settings as IDisposable;
         var raised = new List<string>();
         settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
@@ -255,6 +259,9 @@ public class SettingsMust
         if (t == typeof(GeneralTimeFormatter))
         {
             return new GeneralTimeFormatter();
+        if (t == typeof(LiveSplit.Model.Input.KeyOrButton))
+        {
+            return new LiveSplit.Model.Input.KeyOrButton(System.Windows.Forms.Keys.F12);
         }
 
         if (t == typeof(bool))

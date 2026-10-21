@@ -51,7 +51,7 @@ internal static class TestSupport
             string baseDir = Path.Combine(Path.GetTempPath(), "livesplit-component-tests-host-" + Environment.ProcessId);
             string componentsDir = Path.Combine(baseDir, ComponentManager.PATH_COMPONENTS);
             Directory.CreateDirectory(componentsDir);
-            foreach (string name in new[] { "LiveSplit.Timer", "LiveSplit.DetailedTimer", "LiveSplit.Graph", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace", "LiveSplit.Splits", "LiveSplit.Delta", "LiveSplit.ComparisonTime", "LiveSplit.CurrentComparison", "LiveSplit.PreviousSegment", "LiveSplit.PossibleTimeSave", "LiveSplit.SumOfBest", "LiveSplit.RunPrediction", "LiveSplit.TotalPlaytime", "LiveSplit.WorldRecord", "LiveSplit.Subsplits" })
+            foreach (string name in new[] { "LiveSplit.Timer", "LiveSplit.DetailedTimer", "LiveSplit.Graph", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace", "LiveSplit.Splits", "LiveSplit.Delta", "LiveSplit.ComparisonTime", "LiveSplit.CurrentComparison", "LiveSplit.PreviousSegment", "LiveSplit.PossibleTimeSave", "LiveSplit.SumOfBest", "LiveSplit.RunPrediction", "LiveSplit.TotalPlaytime", "LiveSplit.WorldRecord", "LiveSplit.Subsplits", "LiveSplit.Counter", "LiveSplit.HotkeyIndicator", "LiveSplit.ManualGameTime" })
             {
                 File.Copy(Path.Combine(AppContext.BaseDirectory, name + ".dll"), Path.Combine(componentsDir, name + ".dll"), true);
             }
@@ -68,6 +68,7 @@ internal static class TestSupport
     public static IRun CreateRun()
     {
         var run = new Run(new StandardComparisonGeneratorsFactory())
+        var run = new OfflineRun()
         {
             GameName = "Super Metroid",
             CategoryName = "Any% (Japan)",
@@ -78,6 +79,18 @@ internal static class TestSupport
         run.Add(new Segment("Morph Ball", new Time(TimeSpan.FromSeconds(150)), new Time(TimeSpan.FromSeconds(85))));
         run.Add(new Segment("Kraid", new Time(TimeSpan.FromSeconds(420)), new Time(TimeSpan.FromSeconds(250))));
         return run;
+    }
+
+    // Run's name setters eagerly start online metadata tasks. Hundreds of named
+    // render fixtures otherwise block the shared thread pool on API/cache work,
+    // starving even WorldRecord's empty-metadata refresh in the full suite.
+    // Keep display names on the fixture and metadata on an unnamed backing run.
+    private sealed class OfflineRun : Run, IRun
+    {
+        public OfflineRun() : base(new StandardComparisonGeneratorsFactory()) { }
+        public new string GameName { get; set; }
+        public new string CategoryName { get; set; }
+        public new RunMetadata Metadata { get; } = new(new Run(new StandardComparisonGeneratorsFactory()));
     }
 
     public static LiveSplitState CreateState(IRun run = null)

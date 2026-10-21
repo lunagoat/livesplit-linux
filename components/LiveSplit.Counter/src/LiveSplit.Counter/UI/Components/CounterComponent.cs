@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -15,6 +14,8 @@ public class CounterComponent : IComponent
     public CounterComponent(LiveSplitState state)
     {
         VerticalHeight = 10;
+        // Give the renderer a nonempty region for the first horizontal measurement.
+        HorizontalWidth = 100;
         Settings = new CounterComponentSettings(state.Settings.HotkeyProfiles.First().Value.AllowGamepadsAsHotkeys);
         Cache = new GraphicsCache();
         CounterNameLabel = new SimpleLabel();
@@ -179,6 +180,9 @@ public class CounterComponent : IComponent
     public void Dispose()
     {
         Settings.Hook.KeyOrButtonPressed -= hook_KeyOrButtonPressed;
+        Settings.CounterReinitialiseRequired -= Settings_CounterReinitialiseRequired;
+        Settings.IncrementUpdateRequired -= Settings_IncrementUpdateRequired;
+        Settings.Dispose();
     }
 
     public int GetSettingsHashCode()
@@ -202,7 +206,7 @@ public class CounterComponent : IComponent
     // Basic support for keyboard/button input.
     private void hook_KeyOrButtonPressed(object sender, KeyOrButton e)
     {
-        if ((Form.ActiveForm == state.Form && !Settings.GlobalHotkeysEnabled)
+        if ((state.Form?.IsActive == true && !Settings.GlobalHotkeysEnabled)
             || Settings.GlobalHotkeysEnabled)
         {
             if (e == Settings.IncrementKey)

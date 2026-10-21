@@ -1,27 +1,36 @@
 ﻿using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class HotkeyIndicatorSettings : UserControl
+public class HotkeyIndicatorSettings : SettingsBase
 {
-    public float IndicatorHeight { get; set; }
-    public float IndicatorWidth { get; set; }
-    public LayoutMode Mode { get; set; }
-    public Color HotkeysOnColor { get; set; }
-    public Color HotkeysOffColor { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    private float indicatorHeight;
+    public float IndicatorHeight { get => indicatorHeight; set { if (SetField(ref indicatorHeight, value)) { OnPropertyChanged(nameof(SizeValue)); } } }
+    private float indicatorWidth;
+    public float IndicatorWidth { get => indicatorWidth; set { if (SetField(ref indicatorWidth, value)) { OnPropertyChanged(nameof(SizeValue)); } } }
+    private LayoutMode mode;
+    public LayoutMode Mode { get => mode; set { if (SetField(ref mode, value)) { OnPropertyChanged(nameof(SizeValue)); OnPropertyChanged(nameof(SizeLabel)); } } }
+    private Color hotkeysOnColor;
+    public Color HotkeysOnColor { get => hotkeysOnColor; set => SetField(ref hotkeysOnColor, value); }
+    private Color hotkeysOffColor;
+    public Color HotkeysOffColor { get => hotkeysOffColor; set => SetField(ref hotkeysOffColor, value); }
+    private GradientType backgroundGradient;
+    public GradientType BackgroundGradient { get => backgroundGradient; set { if (SetField(ref backgroundGradient, value)) { OnPropertyChanged(nameof(GradientString)); } } }
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
+    public float SizeValue { get => Mode == LayoutMode.Horizontal ? IndicatorWidth : IndicatorHeight; set { if (Mode == LayoutMode.Horizontal) IndicatorWidth = value; else IndicatorHeight = value; } }
+    public int SizeMinimum => 1;
+    public int SizeMaximum => 50;
+    public string SizeLabel => Mode == LayoutMode.Horizontal ? "Width:" : "Height:";
+
     public HotkeyIndicatorSettings()
     {
-        InitializeComponent();
 
         IndicatorHeight = 3f;
         IndicatorWidth = 3f;
@@ -29,8 +38,6 @@ public partial class HotkeyIndicatorSettings : UserControl
         HotkeysOnColor = Color.FromArgb(41, 204, 84);
         HotkeysOffColor = Color.FromArgb(204, 55, 41);
 
-        btnColor1.DataBindings.Add("BackColor", this, "HotkeysOnColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "HotkeysOffColor", false, DataSourceUpdateMode.OnPropertyChanged);
     }
 
     public void SetSettings(XmlNode node)
@@ -62,28 +69,4 @@ public partial class HotkeyIndicatorSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "IndicatorWidth", IndicatorWidth);
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
-
-    private void HotkeyIndicatorSettings_Load(object sender, EventArgs e)
-    {
-        if (Mode == LayoutMode.Horizontal)
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 1;
-            trkSize.Maximum = 50;
-            trkSize.DataBindings.Add("Value", this, "IndicatorWidth", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = "Width:";
-        }
-        else
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 1;
-            trkSize.Maximum = 50;
-            trkSize.DataBindings.Add("Value", this, "IndicatorHeight", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = "Height:";
-        }
-    }
 }
