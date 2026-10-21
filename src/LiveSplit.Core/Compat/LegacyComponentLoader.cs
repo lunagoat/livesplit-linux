@@ -35,7 +35,10 @@ public static class LegacyComponentLoader
         "kernel32", "user32", "psapi", "ntdll", "gdi32", "dbghelp", "winmm", "advapi32", "shell32", "version", "shlwapi", "ole32",
     ];
 
-    /// <summary>True for assemblies built against the full .NET Framework (they reference mscorlib).</summary>
+    /// <summary>
+    /// True for assemblies built against the full .NET Framework (they reference mscorlib) or
+    /// against the Windows-only WinForms/System.Drawing.Common packages.
+    /// </summary>
     public static bool IsLegacy(string path)
     {
         try
@@ -48,7 +51,7 @@ public static class LegacyComponentLoader
             }
 
             System.Reflection.Metadata.MetadataReader md = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
-            return md.AssemblyReferences.Any(r => md.GetString(md.GetAssemblyReference(r).Name) == "mscorlib");
+            return md.AssemblyReferences.Any(r => md.GetString(md.GetAssemblyReference(r).Name) is "mscorlib" or "System.Windows.Forms" or "System.Drawing.Common");
         }
         catch
         {
@@ -118,8 +121,26 @@ public static class LegacyComponentLoader
     private static Assembly LoadRewritten(string path)
     {
         byte[] rewritten = Rewrite(path);
-        using var stream = new MemoryStream(rewritten);
-        Assembly assembly = AssemblyLoadContext.Default.LoadFromStream(stream);
+
+        // Load from a file next to the original when possible so Assembly.Location (and
+        // directories derived from it) behave as the component expects; fall back to memory.
+        Assembly assembly = null;
+        string sideFile = path + ".compat";
+        try
+        {
+            File.WriteAllBytes(sideFile, rewritten);
+            assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(sideFile);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        if (assembly == null)
+        {
+            using var stream = new MemoryStream(rewritten);
+            assembly = AssemblyLoadContext.Default.LoadFromStream(stream);
+        }
+
         NativeLibrary.SetDllImportResolver(assembly, ResolveNative);
         return assembly;
     }
@@ -189,6 +210,7 @@ public static class LegacyComponentLoader
                     type.Scope = coreWinForms.Contains(name) ? Ref(coreAssembly) : stubRef;
                     break;
                 case "System.Drawing":
+                case "System.Drawing.Common":
                     if (primitives.Contains(name))
                     {
                         type.Scope = Ref(primitivesAssembly);
@@ -220,7 +242,7 @@ public static class LegacyComponentLoader
             foreach (MethodDefinition method in type.Methods)
             {
                 // Settings controls are toolkit-neutral objects in this port.
-                if (method.Name == "GetSettingsControl" && method.ReturnType.FullName == "System.Windows.Forms.Control")
+                if (method.Name == "GetSettingsControl" && method.ReturnType.FullName.StartsWith("System.Windows.Forms.", StringComparison.Ordinal))
                 {
                     method.ReturnType = types.Object;
                 }
@@ -279,6 +301,34 @@ public static class LegacyComponentLoader
             if (owner == "LiveSplit.Model.LiveSplitState" && target.Name == "get_Form")
             {
                 instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.GetForm)));
+                instruction.OpCode = OpCodes.Call;
+                continue;
+            }
+
+            if (owner == "System.Diagnostics.Process" && target.Name == "get_Handle")
+            {
+                instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.GetProcessHandle)));
+                instruction.OpCode = OpCodes.Call;
+                continue;
+            }
+
+            // Legacy BinaryFormatter resources cannot be read any more; degrade to null.
+            if (owner == "System.Resources.ResourceManager" && target.Name == "GetObject" && target.Parameters.Count is 1 or 2
+                && target.Parameters[0].ParameterType.FullName == "System.String")
+            {
+                Type[] signature = target.Parameters.Count == 1
+                    ? [typeof(System.Resources.ResourceManager), typeof(string)]
+                    : [typeof(System.Resources.ResourceManager), typeof(string), typeof(System.Globalization.CultureInfo)];
+                instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.GetResourceObject), signature));
+                instruction.OpCode = OpCodes.Call;
+                continue;
+            }
+
+            // Windows-only NamedPipeClientStream overload.
+            if (instruction.OpCode == OpCodes.Newobj && owner == "System.IO.Pipes.NamedPipeClientStream" && target.Parameters.Count == 6
+                && target.Parameters[2].ParameterType.FullName == "System.IO.Pipes.PipeAccessRights")
+            {
+                instruction.Operand = module.ImportReference(typeof(LegacyCompat).GetMethod(nameof(LegacyCompat.CreatePipeClient)));
                 instruction.OpCode = OpCodes.Call;
                 continue;
             }

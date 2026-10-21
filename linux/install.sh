@@ -96,4 +96,9 @@ case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *) say "Note: $BIN_DIR is not on your PATH. Add it, or run $BIN_DIR/livesplit" ;;
 esac
+if [ -r /proc/sys/kernel/yama/ptrace_scope ] && [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" != "0" ]; then
+    say "Auto splitters read the game's memory; your kernel only allows that for processes LiveSplit started itself (ptrace_scope=$(cat /proc/sys/kernel/yama/ptrace_scope))."
+    say "To attach to running games, run once: sudo setcap cap_sys_ptrace=ep $APP_DIR/LiveSplit"
+    say "(or: sudo sysctl kernel.yama.ptrace_scope=0). See linux/README.md, 'Auto splitters'."
+fi
 command -v fc-list >/dev/null 2>&1 || say "Note: fontconfig not found; text rendering needs it."

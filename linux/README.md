@@ -25,6 +25,23 @@ curl -fsSL https://raw.githubusercontent.com/lunagoat/livesplit-linux/linux-nati
 
 Your splits and settings in `~/.config/LiveSplit` are never touched.
 
+## Auto splitters
+
+Three kinds are supported:
+
+- **`.asl` scripts** (most games) and **auto-splitting runtime (`.wasm`) modules** run natively.
+- **Windows `.dll` components** (e.g. Celeste, Spelunky HD): the original Windows .NET Framework DLL is loaded as-is. Its references are rewritten in memory onto this port, its Windows Forms settings window is replaced by a headless stub, and its `kernel32`/`psapi`/`user32` calls go to `libwin32shim.so`. Components that need WPF are not supported. These components use their default settings for now (no settings window yet).
+
+**Permissions.** Auto splitters read the game's memory with `process_vm_readv`. With `kernel.yama.ptrace_scope=1` (the default on most distros) that only works for processes LiveSplit launched itself. To attach to a game started elsewhere (Steam, Proton), do one of:
+
+```sh
+sudo setcap cap_sys_ptrace=ep ~/.local/share/livesplit/LiveSplit   # then restart LiveSplit
+# or, system-wide until reboot:
+sudo sysctl kernel.yama.ptrace_scope=0
+```
+
+Windows games under Wine/Proton are read at their Windows addresses.
+
 ## Feature & Component Status
 
 ### Component Support

@@ -1,5 +1,10 @@
 using System;
+using System.Globalization;
+using System.IO;
+using System.IO.Pipes;
 using System.Reflection;
+using System.Resources;
+using System.Security.Principal;
 using System.Runtime.CompilerServices;
 using LiveSplit.Model;
 
@@ -43,5 +48,55 @@ public static class LegacyCompat
         }
 
         return form;
+    }
+
+    /// <summary>
+    /// ResourceManager.GetObject for legacy assemblies. Their .resources hold BinaryFormatter
+    /// blobs (icons, bitmaps) that .NET can no longer read; return null for those instead of
+    /// failing the whole component.
+    /// </summary>
+    public static object GetResourceObject(ResourceManager manager, string name)
+    {
+        try
+        {
+            return manager.GetObject(name);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
+
+    public static object GetResourceObject(ResourceManager manager, string name, CultureInfo culture)
+    {
+        try
+        {
+            return manager.GetObject(name, culture);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The NamedPipeClientStream overload taking PipeAccessRights is Windows-only; map the
+    /// rights to a PipeDirection and use the portable constructor.
+    /// </summary>
+    public static NamedPipeClientStream CreatePipeClient(string serverName, string pipeName, PipeAccessRights rights, PipeOptions options, TokenImpersonationLevel impersonation, HandleInheritability inheritability)
+    {
+        bool read = (rights & PipeAccessRights.ReadData) != 0;
+        bool write = (rights & PipeAccessRights.WriteData) != 0;
+        PipeDirection direction = read && !write ? PipeDirection.In : write && !read ? PipeDirection.Out : PipeDirection.InOut;
+        return new NamedPipeClientStream(serverName, pipeName, direction, options, impersonation, inheritability);
+    }
+
+    /// <summary>
+    /// Process.Handle is a pidfd-style descriptor on Linux; legacy code passes it straight to
+    /// ReadProcessMemory/VirtualQueryEx, which libwin32shim expects to be the pid.
+    /// </summary>
+    public static IntPtr GetProcessHandle(System.Diagnostics.Process process)
+    {
+        return process == null ? IntPtr.Zero : (IntPtr)process.Id;
     }
 }
