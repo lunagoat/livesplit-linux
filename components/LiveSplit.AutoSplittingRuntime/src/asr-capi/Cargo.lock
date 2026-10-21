@@ -972,7 +972,6 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 [[package]]
 name = "livesplit-auto-splitting"
 version = "0.1.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#6b840f0d647b8e2d1175143030fd3477c9f2768b"
 dependencies = [
  "anyhow",
  "arc-swap",

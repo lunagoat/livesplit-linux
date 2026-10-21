@@ -7,7 +7,7 @@ edition = "2021"
 
 [target.'cfg(target_pointer_width = "64")'.dependencies]
 anyhow = "1.0.75"
-livesplit-auto-splitting = { git = "https://github.com/LiveSplit/livesplit-core" }
+livesplit-auto-splitting = { path = "vendor/livesplit-auto-splitting" }
 # livesplit-auto-splitting = { path = "P:\\livesplit-core\\crates\\livesplit-auto-splitting" }
 mime_guess = "2.0.4"
 smallstr = { version = "0.3.0", features = ["union"] }

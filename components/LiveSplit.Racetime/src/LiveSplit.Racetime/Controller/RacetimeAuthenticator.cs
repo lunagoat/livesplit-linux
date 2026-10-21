@@ -3,6 +3,8 @@ using LiveSplit.Web;
 using System;
 using System.IO;
 using System.Net;
+using System.Net.Http;
+using LiveSplit.Hosting;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -60,9 +62,11 @@ public class RacetimeAuthenticator
         return true;
     }
 
-    public RacetimeAuthenticator(IAuthentificationSettings s)
+    private readonly HttpClient client;
+    public RacetimeAuthenticator(IAuthentificationSettings s, HttpClient client = null)
     {
         this.s = s;
+        this.client = client ?? new HttpClient();
     }
 
     private readonly Regex parameterRegex = new(@"(\w+)=([-_A-Z0-9]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -98,7 +102,7 @@ public class RacetimeAuthenticator
     private static string SHA256(string inputStirng)
     {
         byte[] bytes = Encoding.ASCII.GetBytes(inputStirng);
-        var sha256 = new SHA256Managed();
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
         byte[] hash = sha256.ComputeHash(bytes);
 
         string base64 = Convert.ToBase64String(hash);
@@ -110,7 +114,7 @@ public class RacetimeAuthenticator
 
     private static string GenerateRandomBase64Data(uint length)
     {
-        var rng = new RNGCryptoServiceProvider();
+        using var rng = RandomNumberGenerator.Create();
         byte[] bytes = new byte[length];
         rng.GetBytes(bytes);
         string base64 = Convert.ToBase64String(bytes);
@@ -238,7 +242,7 @@ public class RacetimeAuthenticator
 
             Task<TcpClient> serverConnectionTask = localEndpoint.AcceptTcpClientAsync();
 
-            System.Diagnostics.Process.Start(request);
+            PlatformServices.Current.OpenUrl(request);
 
             using TcpClient serverConnection = await serverConnectionTask;
             response = ReadResponse(serverConnection);
@@ -307,27 +311,6 @@ public class RacetimeAuthenticator
         bool secondRun = false;
 
     start:
-
-        //0th:  ping server to check connectivity
-        string host = Properties.Resources.DOMAIN.Contains(":") ? Properties.Resources.DOMAIN[..Properties.Resources.DOMAIN.IndexOf(':')] : Properties.Resources.DOMAIN;
-        try
-        {
-            var myPing = new Ping();
-            byte[] buffer = new byte[32];
-            int timeout = 5000;
-            var pingOptions = new PingOptions();
-            PingReply reply = myPing.Send(host, timeout, buffer, pingOptions);
-            if (reply.Status != IPStatus.Success)
-            {
-                Error = $"No Connection to {host}";
-                goto failure;
-            }
-        }
-        catch (Exception)
-        {
-            Error = $"Unable to ping {host}";
-            goto failure;
-        }
 
         //1st: Try to get User information
         try
@@ -401,10 +384,11 @@ public class RacetimeAuthenticator
 
     public RacetimeUser GetUserInfo(IAuthentificationSettings s, string AccessToken)
     {
-        var userInfoRequest = WebRequest.Create($"{s.AuthServer}{s.UserInfoEndpoint}");
-        userInfoRequest.Headers.Add(HttpRequestHeader.Authorization, $"Bearer {AccessToken}");
-        using WebResponse r = userInfoRequest.GetResponse();
-        dynamic userdata = JSON.FromResponse(r);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{s.AuthServer}{s.UserInfoEndpoint}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", AccessToken);
+        using var response = client.Send(request);
+        response.EnsureSuccessStatusCode();
+        dynamic userdata = JSON.FromString(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
         return RTModelBase.Create<RacetimeUser>(userdata);
     }
 
@@ -417,43 +401,10 @@ public class RacetimeAuthenticator
     {
         string state = GenerateRandomBase64Data(32);
         body += "&state=" + state;
-        var tokenRequest = (HttpWebRequest)WebRequest.Create($"{s.AuthServer}{s.TokenEndpoint}");
-
-        tokenRequest.Method = "POST";
-        tokenRequest.ContentType = "application/x-www-form-urlencoded";
-        tokenRequest.Accept = "Accept=text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
-        byte[] buf = Encoding.ASCII.GetBytes(body);
-        tokenRequest.ContentLength = buf.Length;
-        using Stream stream = tokenRequest.GetRequestStream();
-        await stream.WriteAsync(buf, 0, buf.Length);
-
-        try
-        {
-            WebResponse tokenResponse = await tokenRequest.GetResponseAsync();
-            dynamic response = JSON.FromResponse(tokenResponse);
-            return new Tuple<int, dynamic>(200, response);
-        }
-        catch (WebException ex)
-        {
-            if (ex.Status == WebExceptionStatus.ProtocolError)
-            {
-                WebResponse response = ex.Response as HttpWebResponse;
-                try
-                {
-                    dynamic r = JSON.FromResponse(response);
-                    return new Tuple<int, dynamic>(400, r);
-                }
-                catch
-                {
-                    return new Tuple<int, dynamic>(500, null);
-                }
-            }
-        }
-        catch
-        {
-
-        }
-
-        return new Tuple<int, dynamic>(500, null);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{s.AuthServer}{endpoint}");
+        request.Content = new StringContent(body, Encoding.UTF8, "application/x-www-form-urlencoded");
+        using var response = await client.SendAsync(request);
+        dynamic data = JSON.FromString(await response.Content.ReadAsStringAsync());
+        return new Tuple<int, dynamic>((int)response.StatusCode, data);
     }
 }

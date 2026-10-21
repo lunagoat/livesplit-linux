@@ -4,12 +4,13 @@ using LiveSplit.UI;
 using System;
 using System.Globalization;
 using System.IO;
-using System.Windows.Forms;
+using System.Collections.ObjectModel;
+using LiveSplit.Hosting;
 using System.Xml;
 
 namespace LiveSplit.AutoSplittingRuntime;
 
-public partial class ComponentSettings : UserControl
+public class ComponentSettings : SettingsBase
 {
     private string scriptPath;
     public string ScriptPath
@@ -19,13 +20,13 @@ public partial class ComponentSettings : UserControl
         {
             if (value != scriptPath)
             {
-                scriptPath = value;
+                scriptPath = PathCompat.Resolve(value);
+                OnPropertyChanged();
                 ReloadRuntime(null);
             }
         }
     }
     private readonly bool fixedScriptPath = false;
-    private readonly string scriptExtention = ".wasm";
 
     public Runtime runtime = null;
 
@@ -53,12 +54,11 @@ public partial class ComponentSettings : UserControl
 
     public ComponentSettings(TimerModel model)
     {
-        InitializeComponent();
+
 
         scriptPath = "";
 
-        txtScriptPath.DataBindings.Add("Text", this, "ScriptPath", false,
-            DataSourceUpdateMode.OnPropertyChanged);
+
 
         getState = () =>
         {
@@ -102,8 +102,7 @@ public partial class ComponentSettings : UserControl
     {
         ScriptPath = scriptPath;
         fixedScriptPath = true;
-        btnSelectFile.Enabled = false;
-        txtScriptPath.Enabled = false;
+
     }
 
     public void ReloadRuntime(SettingsMap settingsMap)
@@ -123,6 +122,8 @@ public partial class ComponentSettings : UserControl
 
             if (!string.IsNullOrEmpty(ScriptPath))
             {
+                Error = null;
+                OnPropertyChanged(nameof(Error));
                 runtime = new Runtime(
                     ScriptPath,
                     settingsMap,
@@ -140,337 +141,60 @@ public partial class ComponentSettings : UserControl
                     setCustomVariable,
                     log
                 );
+                BuildTree();
             }
+            else if (settingsMap != null) { previousMap?.Dispose(); previousMap = settingsMap; }
         }
         catch (Exception ex)
         {
+            Error = ex.Message;
+            OnPropertyChanged(nameof(Error));
             Log.Error(ex);
         }
     }
 
+    public bool IsScriptPathEnabled => !fixedScriptPath;
+    public ObservableCollection<ASRWidget> Items { get; } = [];
+    public string Error { get; private set; }
+
     public void BuildTree()
     {
-        if (runtime != null)
+        Items.Clear();
+        if (runtime == null) return;
+        previousWidgets?.Dispose();
+        previousWidgets = runtime.GetSettingsWidgets();
+        previousMap?.Dispose();
+        previousMap = runtime.GetSettingsMap();
+        int level = 0;
+        for (ulong i = 0; i < previousWidgets.GetLength(); i++)
         {
-            previousWidgets?.Dispose();
-            Widgets widgets = previousWidgets = runtime.GetSettingsWidgets();
-
-            previousMap?.Dispose();
-            previousMap = runtime.GetSettingsMap();
-
-            ulong len = widgets.GetLength();
-
-            int margin = 3;
-
-            int rowIndex = 0;
-
-            for (ulong i = 0; i < len; i++)
+            string type = previousWidgets.GetType(i);
+            if (type == "title") level = (int)previousWidgets.GetHeadingLevel(i);
+            var item = new ASRWidget(this, previousWidgets.GetKey(i), type,
+                previousWidgets.GetDescription(i), previousWidgets.GetTooltip(i), level);
+            if (type == "bool") item.Initialize(previousWidgets.GetBool(i, previousMap), null);
+            if (type == "choice")
             {
-                string desc = widgets.GetDescription(i);
-                string tooltip = widgets.GetTooltip(i);
-                string ty = widgets.GetType(i);
-
-                switch (ty)
-                {
-                    case "bool":
-                    {
-                        if (rowIndex < settingsTable.RowStyles.Count
-                            && settingsTable.GetControlFromPosition(0, rowIndex) is CheckBox exCheckbox
-                            && exCheckbox.Text == desc
-                            && exCheckbox.Tag is string exTag
-                            && exTag == widgets.GetKey(i)
-                            && exCheckbox.Margin.Left == margin)
-                        {
-                            exCheckbox.Checked = widgets.GetBool(i, previousMap);
-                            toolTip.SetToolTip(exCheckbox, tooltip);
-                        }
-                        else
-                        {
-                            ClearSettingsTableTail(rowIndex);
-                            var checkbox = new CheckBox
-                            {
-                                Text = desc,
-                                Tag = widgets.GetKey(i),
-                                Margin = new Padding(margin, 0, 0, 0),
-                                Checked = widgets.GetBool(i, previousMap)
-                            };
-                            checkbox.CheckedChanged += Checkbox_CheckedChanged;
-                            checkbox.Anchor |= AnchorStyles.Right;
-                            toolTip.SetToolTip(checkbox, tooltip);
-                            settingsTable.Controls.Add(checkbox, 0, settingsTable.RowStyles.Count);
-                            settingsTable.RowStyles.Add(new RowStyle(SizeType.Absolute, checkbox.Height));
-                        }
-
-                        rowIndex++;
-                        break;
-                    }
-                    case "title":
-                    {
-                        int headingLevel = (int)widgets.GetHeadingLevel(i);
-                        margin = 20 * headingLevel;
-
-                        if (rowIndex < settingsTable.RowStyles.Count
-                            && settingsTable.GetControlFromPosition(0, rowIndex) is Label exLabel
-                            && exLabel.Margin.Left == margin
-                            && exLabel.Text == $"—  {desc}")
-                        {
-                            toolTip.SetToolTip(exLabel, tooltip);
-                        }
-                        else
-                        {
-                            ClearSettingsTableTail(rowIndex);
-                            var label = new Label
-                            {
-                                Margin = new Padding(margin, 3, 0, 0),
-                                Text = $"—  {desc}"
-                            };
-                            label.Anchor |= AnchorStyles.Right;
-                            toolTip.SetToolTip(label, tooltip);
-                            settingsTable.Controls.Add(label, 0, settingsTable.RowStyles.Count);
-                            settingsTable.RowStyles.Add(new RowStyle(SizeType.Absolute, label.Height));
-                        }
-
-                        margin += 20;
-                        rowIndex++;
-                        break;
-                    }
-                    case "choice":
-                    {
-                        if (rowIndex < settingsTable.RowStyles.Count
-                            && settingsTable.GetControlFromPosition(0, rowIndex) is Label exLabel
-                            && exLabel.Text == desc
-                            && exLabel.Margin.Left == margin)
-                        {
-                            toolTip.SetToolTip(exLabel, tooltip);
-                        }
-                        else
-                        {
-                            ClearSettingsTableTail(rowIndex);
-                            var label = new Label
-                            {
-                                Text = desc,
-                                Margin = new Padding(margin, 0, 0, 0)
-                            };
-                            label.Anchor |= AnchorStyles.Right;
-                            toolTip.SetToolTip(label, tooltip);
-                            settingsTable.Controls.Add(label, 0, settingsTable.RowStyles.Count);
-                            settingsTable.RowStyles.Add(new RowStyle(SizeType.Absolute, label.Height));
-                        }
-
-                        rowIndex++;
-
-                        if (rowIndex < settingsTable.RowStyles.Count
-                            && settingsTable.GetControlFromPosition(0, rowIndex) is ComboBox exCombo
-                            && exCombo.Tag is string exTag
-                            && exTag == widgets.GetKey(i)
-                            && exCombo.Margin.Left == margin
-                            && exCombo.Items.Count == (int)widgets.GetChoiceOptionsLength(i))
-                        {
-                            toolTip.SetToolTip(exCombo, tooltip);
-                            exCombo.SelectedIndex = (int)widgets.GetChoiceCurrentIndex(i, previousMap);
-                        }
-                        else
-                        {
-                            ClearSettingsTableTail(rowIndex);
-                            var combo = new ComboBox
-                            {
-                                Tag = widgets.GetKey(i),
-                                Margin = new Padding(margin, 0, 0, 0),
-                                DropDownStyle = ComboBoxStyle.DropDownList
-                            };
-                            combo.Anchor |= AnchorStyles.Right;
-                            toolTip.SetToolTip(combo, tooltip);
-                            ulong choicesLen = widgets.GetChoiceOptionsLength(i);
-                            for (ulong choiceIndex = 0; choiceIndex < choicesLen; choiceIndex++)
-                            {
-                                var choice = new Choice
-                                {
-                                    description = widgets.GetChoiceOptionDescription(i, choiceIndex),
-                                    key = widgets.GetChoiceOptionKey(i, choiceIndex)
-                                };
-                                combo.Items.Add(choice);
-                            }
-
-                            combo.SelectedIndex = (int)widgets.GetChoiceCurrentIndex(i, previousMap);
-                            combo.SelectedIndexChanged += Combo_SelectedIndexChanged;
-                            settingsTable.Controls.Add(combo, 0, settingsTable.RowStyles.Count);
-                            settingsTable.RowStyles.Add(new RowStyle(SizeType.Absolute, combo.Height + 5));
-                        }
-
-                        rowIndex++;
-                        break;
-                    }
-                    case "file-select":
-                    {
-                        if (rowIndex < settingsTable.RowStyles.Count
-                            && settingsTable.GetControlFromPosition(0, rowIndex) is Button exButton
-                            && exButton.Tag is FileSelectInfo exTag
-                            && exTag.key == widgets.GetKey(i)
-                            && exTag.filter == widgets.GetFileSelectFilter(i)
-                            && exButton.Text == desc
-                            && exButton.Margin.Left == margin)
-                        {
-                            toolTip.SetToolTip(exButton, tooltip);
-                        }
-                        else
-                        {
-                            ClearSettingsTableTail(rowIndex);
-                            var button = new Button
-                            {
-                                Tag = new FileSelectInfo(widgets.GetKey(i), widgets.GetFileSelectFilter(i)),
-                                Text = desc,
-                                Margin = new Padding(margin, 0, 0, 0),
-                            };
-                            button.Click += FileSelect_Click;
-                            button.Anchor |= AnchorStyles.Right;
-                            toolTip.SetToolTip(button, tooltip);
-                            settingsTable.Controls.Add(button, 0, settingsTable.RowStyles.Count);
-                            settingsTable.RowStyles.Add(new RowStyle(SizeType.Absolute, button.Height));
-                        }
-
-                        rowIndex++;
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-                }
+                for (ulong j = 0; j < previousWidgets.GetChoiceOptionsLength(i); j++)
+                    item.Choices.Add(new ASRChoice(previousWidgets.GetChoiceOptionKey(i, j), previousWidgets.GetChoiceOptionDescription(i, j)));
+                int index = (int)previousWidgets.GetChoiceCurrentIndex(i, previousMap);
+                item.Initialize(false, index >= 0 && index < item.Choices.Count ? item.Choices[index].Key : null);
             }
-        }
-    }
-
-    /// <summary>
-    /// Clears the settingsTable rows from rowIndex onward
-    /// </summary>
-    /// <param name="rowIndex">The row position to start clearing after</param>
-    private void ClearSettingsTableTail(int rowIndex)
-    {
-        if (rowIndex == 0)
-        {
-            settingsTable.Controls.Clear();
-            settingsTable.RowCount = 0;
-            settingsTable.RowStyles.Clear();
-            return;
-        }
-
-        for (int j = settingsTable.RowStyles.Count - 1; j >= rowIndex; j--)
-        {
-            settingsTable.Controls.Remove(settingsTable.GetControlFromPosition(0, j));
-            settingsTable.RowStyles.RemoveAt(j);
-        }
-
-        settingsTable.RowCount = rowIndex;
-    }
-
-    private void Combo_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        var combo = (ComboBox)sender;
-        if (combo.Tag is not string)
-        {
-            return;
-        }
-
-        if (combo.SelectedItem is not Choice)
-        {
-            return;
-        }
-
-        var choice = (Choice)combo.SelectedItem;
-
-        if (runtime != null)
-        {
-            runtime.SettingsMapSetString((string)combo.Tag, choice.key);
-            SettingsMap prev = previousMap;
-            previousMap = runtime.GetSettingsMap();
-            prev?.Dispose();
-        }
-    }
-
-    private void FileSelect_Click(object sender, EventArgs e)
-    {
-        var button = (Button)sender;
-        if (button.Tag is not FileSelectInfo)
-        {
-            return;
-        }
-
-        var tag = (FileSelectInfo)button.Tag;
-        var dialog = new OpenFileDialog()
-        {
-            Filter = tag.filter
-        };
-        string oldWindowsPath = "";
-        if (runtime != null)
-        {
-            using SettingsMap settingsMap = runtime.GetSettingsMap();
-            if (settingsMap != null)
+            if (type == "file-select")
             {
-                SettingValueRef value = settingsMap.KeyGetValue(tag.key);
-                if (value != null)
-                {
-                    oldWindowsPath = ASRNative.wasi_to_path(value.GetString());
-                }
+                item.Filter = previousWidgets.GetFileSelectFilter(i);
+                var value = previousMap?.KeyGetValue(item.Key);
+                item.Initialize(false, value == null ? "" : ASRNative.wasi_to_path(value.GetString()));
             }
-        }
-
-        if (File.Exists(oldWindowsPath))
-        {
-            dialog.InitialDirectory = Path.GetDirectoryName(oldWindowsPath);
-            dialog.FileName = Path.GetFileName(oldWindowsPath);
-        }
-
-        if (dialog.ShowDialog() == DialogResult.OK)
-        {
-            string newWindowsPath = dialog.FileName;
-            string newWasiPath = ASRNative.path_to_wasi(newWindowsPath);
-            if (runtime != null)
-            {
-                runtime.SettingsMapSetString(tag.key, newWasiPath);
-                SettingsMap prev = previousMap;
-                previousMap = runtime.GetSettingsMap();
-                prev?.Dispose();
-            }
+            Items.Add(item);
         }
     }
 
-    private class Choice
+    internal void SetValue(ASRWidget item)
     {
-        public string key;
-        public string description;
-
-        public override string ToString()
-        {
-            return description;
-        }
-    }
-
-    private readonly struct FileSelectInfo
-    {
-        public FileSelectInfo(string k, string f)
-        {
-            key = k;
-            filter = f;
-        }
-        public readonly string key;
-        public readonly string filter;
-    }
-
-    private void Checkbox_CheckedChanged(object sender, EventArgs e)
-    {
-        var checkbox = (CheckBox)sender;
-        if (checkbox.Tag is not string)
-        {
-            return;
-        }
-
-        if (runtime != null)
-        {
-            runtime.SettingsMapSetBool((string)checkbox.Tag, checkbox.Checked);
-            SettingsMap prev = previousMap;
-            previousMap = runtime.GetSettingsMap();
-            prev?.Dispose();
-        }
+        if (runtime == null) return;
+        if (item.Type == "bool") runtime.SettingsMapSetBool(item.Key, item.BooleanValue);
+        else runtime.SettingsMapSetString(item.Key, item.Type == "file-select" ? ASRNative.path_to_wasi(item.StringValue) : item.StringValue);
     }
 
     public XmlNode GetSettings(XmlDocument document)
@@ -501,7 +225,8 @@ public partial class ComponentSettings : UserControl
                 string newScriptPath = SettingsHelper.ParseString(element["ScriptPath"], string.Empty);
                 if (newScriptPath != scriptPath)
                 {
-                    scriptPath = newScriptPath;
+                    scriptPath = PathCompat.Resolve(newScriptPath);
+                    OnPropertyChanged(nameof(ScriptPath));
                     ReloadRuntime(settingsMap);
                     return;
                 }
@@ -516,7 +241,8 @@ public partial class ComponentSettings : UserControl
                 return;
             }
 
-            settingsMap?.Dispose();
+            previousMap?.Dispose();
+            previousMap = settingsMap;
         }
     }
 
@@ -533,6 +259,7 @@ public partial class ComponentSettings : UserControl
             }
         }
 
+        if (runtime == null && previousMap != null) BuildMap(document, asrParent, previousMap);
         parent.AppendChild(asrParent);
     }
 
@@ -743,46 +470,4 @@ public partial class ComponentSettings : UserControl
         }
     }
 
-    private void btnSelectFile_Click(object sender, EventArgs e)
-    {
-        var dialog = new OpenFileDialog()
-        {
-            Filter = $"WebAssembly module (*{scriptExtention})|*{scriptExtention}|All Files (*.*)|*.*"
-        };
-        if (File.Exists(ScriptPath))
-        {
-            dialog.InitialDirectory = Path.GetDirectoryName(ScriptPath);
-            dialog.FileName = Path.GetFileName(ScriptPath);
-        }
-
-        if (dialog.ShowDialog() == DialogResult.OK)
-        {
-            scriptPath = txtScriptPath.Text = dialog.FileName;
-        }
-    }
-
-    private void txtScriptPath_DragDrop(object sender, DragEventArgs e)
-    {
-        string[] paths = (string[])e.Data.GetData(DataFormats.FileDrop, false);
-        foreach (string path in paths)
-        {
-            if (Path.GetExtension(path).ToLower() != scriptExtention)
-            {
-                continue;
-            }
-
-            txtScriptPath.Text = path;
-            ScriptPath = path;
-            break;
-        }
-    }
-
-    private void txtScriptPath_DragEnter(object sender, DragEventArgs e)
-    {
-        e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    private void ComponentSettings_Load(object sender, EventArgs e)
-    {
-    }
 }

@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
+using LiveSplit.Hosting;
 using System.Threading.Tasks;
 
 namespace LiveSplit.Racetime;
@@ -20,9 +22,13 @@ public class RacetimeAPI : RaceProviderAPI
 
     public static RacetimeAPI Instance => field ??= new();
 
-    public RacetimeAPI()
+    public event Action<ChannelForm> ChannelOpened;
+    public HttpClient HttpClient { get; }
+
+    public RacetimeAPI(HttpClient client = null)
     {
-        Authenticator = new RacetimeAuthenticator(new RTAuthentificationSettings());
+        HttpClient = client ?? new HttpClient();
+        Authenticator = new RacetimeAuthenticator(new RTAuthentificationSettings(), HttpClient);
         JoinRace = Join;
         CreateRace = Create;
     }
@@ -30,7 +36,9 @@ public class RacetimeAPI : RaceProviderAPI
     public void Join(ITimerModel model, string id)
     {
         var channel = new RacetimeChannel(model.CurrentState, model, (RacetimeSettings)Settings);
-        _ = new ChannelForm(channel, id, model.CurrentState.LayoutSettings.AlwaysOnTop);
+        var view = new ChannelForm(channel, id, model.CurrentState.LayoutSettings.AlwaysOnTop);
+        ChannelOpened?.Invoke(view);
+        view.Connect(id);
     }
 
     public void Warn()
@@ -40,7 +48,7 @@ public class RacetimeAPI : RaceProviderAPI
 
     public void Create(ITimerModel model)
     {
-        Process.Start(GetUri(Properties.Resources.CREATE_RACE_ADDRESS).AbsoluteUri);
+        PlatformServices.Current.OpenUrl(GetUri(Properties.Resources.CREATE_RACE_ADDRESS).AbsoluteUri);
     }
 
     public IEnumerable<Race> Races { get; set; }
@@ -73,11 +81,11 @@ public class RacetimeAPI : RaceProviderAPI
 
     protected IEnumerable<Race> GetRacesFromServer()
     {
-        var request = WebRequest.Create(new Uri(BaseUri.AbsoluteUri + racesEndpoint));
-        request.Headers.Add("Authorization", "Bearer " + Authenticator.AccessToken);
-
-        using WebResponse response = request.GetResponse();
-        dynamic data = JSON.FromResponse(response);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(BaseUri.AbsoluteUri + racesEndpoint));
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Authenticator.AccessToken);
+        using var response = HttpClient.Send(request);
+        response.EnsureSuccessStatusCode();
+        dynamic data = JSON.FromString(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
 
         dynamic races = data.races;
         foreach (dynamic r in races)

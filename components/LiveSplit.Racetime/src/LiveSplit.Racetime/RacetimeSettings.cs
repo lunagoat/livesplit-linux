@@ -1,7 +1,7 @@
 ﻿using LiveSplit.Options;
 using LiveSplit.UI;
 using System;
-using System.Windows.Forms;
+
 using System.Xml;
 
 namespace LiveSplit.Racetime;
@@ -26,7 +26,7 @@ public class RacetimeSettings : RaceProviderSettings
         control = new RacetimeSettingsControl();
     }
 
-    public override Control GetSettingsControl()
+    public override object GetSettingsControl()
     {
         control.Settings = this;
         return control;

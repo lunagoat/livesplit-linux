@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.AutoSplittingRuntime/src/LiveSplit.AutoSplittingRuntime/LiveSplit.AutoSplittingRuntime.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Racetime/src/LiveSplit.Racetime/LiveSplit.Racetime.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.ScriptableAutoSplit/src/LiveSplit.ScriptableAutoSplit/LiveSplit.ScriptableAutoSplit.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.TheRun/src/LiveSplit.TheRun/LiveSplit.TheRun.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.DetailedTimer/src/LiveSplit.DetailedTimer/LiveSplit.DetailedTimer.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Graph/src/LiveSplit.Graph/LiveSplit.Graph.csproj" />
 

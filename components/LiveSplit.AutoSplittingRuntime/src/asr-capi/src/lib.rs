@@ -203,3 +203,10 @@ pub unsafe extern "C" fn wasi_to_path(_wasi_path: *const u8) -> *const u8 {
     #[cfg(not(target_pointer_width = "64"))]
     "\0".as_ptr()
 }
+
+/// Installs a process name to PID callback. The host must retain it for the library lifetime.
+#[cfg(target_pointer_width = "64")]
+#[no_mangle]
+pub extern "C" fn set_process_resolver(resolver: Option<unsafe extern "C" fn(*const u8, usize) -> u32>) {
+    livesplit_auto_splitting::set_process_resolver(resolver);
+}

@@ -229,7 +229,7 @@ public class ASLScript
         {
             // default to the state with no version specified, if it exists
             State = _states[proccessName].FirstOrDefault(s => s.GameVersion == "") ?? _states[proccessName].First(),
-            Process = Process.GetProcessesByName(proccessName).OrderByDescending(x => x.StartTime)
+            Process = LiveSplit.ComponentUtil.ProcessUtil.GetProcessesByName(proccessName).OrderByDescending(x => x.StartTime)
                 .FirstOrDefault(x => !x.HasExited)
         }).FirstOrDefault(x => x.Process != null);
 

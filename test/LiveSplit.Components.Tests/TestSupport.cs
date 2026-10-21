@@ -51,7 +51,7 @@ internal static class TestSupport
             string baseDir = Path.Combine(Path.GetTempPath(), "livesplit-component-tests-host-" + Environment.ProcessId);
             string componentsDir = Path.Combine(baseDir, ComponentManager.PATH_COMPONENTS);
             Directory.CreateDirectory(componentsDir);
-            foreach (string name in new[] { "LiveSplit.Timer", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace", "LiveSplit.Splits", "LiveSplit.Delta", "LiveSplit.ComparisonTime", "LiveSplit.CurrentComparison", "LiveSplit.PreviousSegment", "LiveSplit.PossibleTimeSave", "LiveSplit.SumOfBest", "LiveSplit.RunPrediction", "LiveSplit.TotalPlaytime", "LiveSplit.WorldRecord", "LiveSplit.Counter", "LiveSplit.HotkeyIndicator", "LiveSplit.ManualGameTime", "LiveSplit.DetailedTimer", "LiveSplit.Graph", "LiveSplit.Subsplits", "LiveSplit.Sound", "LiveSplit.Video" })
+            foreach (string name in new[] { "LiveSplit.AutoSplittingRuntime", "LiveSplit.Racetime", "LiveSplit.ScriptableAutoSplit", "LiveSplit.TheRun", "LiveSplit.Timer", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace", "LiveSplit.Splits", "LiveSplit.Delta", "LiveSplit.ComparisonTime", "LiveSplit.CurrentComparison", "LiveSplit.PreviousSegment", "LiveSplit.PossibleTimeSave", "LiveSplit.SumOfBest", "LiveSplit.RunPrediction", "LiveSplit.TotalPlaytime", "LiveSplit.WorldRecord", "LiveSplit.Counter", "LiveSplit.HotkeyIndicator", "LiveSplit.ManualGameTime", "LiveSplit.DetailedTimer", "LiveSplit.Graph", "LiveSplit.Subsplits", "LiveSplit.Sound", "LiveSplit.Video" })
             {
                 File.Copy(Path.Combine(AppContext.BaseDirectory, name + ".dll"), Path.Combine(componentsDir, name + ".dll"), true);
             }

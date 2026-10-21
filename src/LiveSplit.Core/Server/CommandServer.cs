@@ -120,12 +120,17 @@ public class CommandServer
 
     public void StopTcp()
     {
-        foreach (TcpConnection connection in TcpConnections.ToList())
+        List<TcpConnection> list;
+        lock (TcpConnections)
+        {
+            list = TcpConnections.ToList();
+            TcpConnections.Clear();
+        }
+
+        foreach (TcpConnection connection in list)
         {
             connection.Dispose();
         }
-
-        TcpConnections.Clear();
         Server?.Stop();
         if (ServerState == ServerStateType.TCP)
         {
@@ -174,7 +179,10 @@ public class CommandServer
             var connection = new TcpConnection(client);
             connection.MessageReceived += connection_MessageReceived;
             connection.Disconnected += tcpConnection_Disconnected;
-            TcpConnections.Add(connection);
+            lock (TcpConnections)
+            {
+                TcpConnections.Add(connection);
+            }
 
             Server.BeginAcceptTcpClient(AcceptTcpClient, null);
         }
@@ -917,7 +925,10 @@ public class CommandServer
         var connection = (TcpConnection)sender;
         connection.MessageReceived -= connection_MessageReceived;
         connection.Disconnected -= tcpConnection_Disconnected;
-        TcpConnections.Remove(connection);
+        lock (TcpConnections)
+        {
+            TcpConnections.Remove(connection);
+        }
         connection.Dispose();
     }
 

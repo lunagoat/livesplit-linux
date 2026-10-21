@@ -1,26 +1,8 @@
-﻿using System;
-using System.Windows.Forms;
-
+﻿using LiveSplit.UI;
 namespace LiveSplit.Racetime;
-
-public partial class RacetimeSettingsControl : UserControl
+public class RacetimeSettingsControl : SettingsBase
 {
-    public RacetimeSettings Settings
-    {
-        get;
-        set
-        {
-            field = value;
-            RacetimeSettingsControl_VisibleChanged(this, null);
-        }
-    }
-
-    public RacetimeSettingsControl()
-    {
-        InitializeComponent();
-    }
-
-    private void RacetimeSettingsControl_VisibleChanged(object sender, EventArgs e)
-    {
-    }
+    private RacetimeSettings settings;
+    public RacetimeSettings Settings { get => settings; set => SetField(ref settings, value); }
+    public string Message => "There are no options available for this racing service.";
 }

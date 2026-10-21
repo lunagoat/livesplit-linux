@@ -8,8 +8,8 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using System.Web.Script.Serialization;
-using System.Windows.Forms;
+using System.Text.Json;
+
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
@@ -38,12 +38,12 @@ public class CollectorComponent : LogicComponent
     private TimeSpan CurrentPausedTime = TimeSpan.Zero;
     private TimeSpan TimePausedBeforeResume = TimeSpan.Zero;
 
-    public CollectorComponent(LiveSplitState state)
+    public CollectorComponent(LiveSplitState state, HttpClient client = null)
     {
         State = state;
-        Settings = new CollectorSettings();
+        Settings = new CollectorSettings(client ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) });
 
-        httpClient = new HttpClient
+        httpClient = client ?? new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(15)
         };
@@ -73,8 +73,7 @@ public class CollectorComponent : LogicComponent
 
         object returnData = buildLiveRunData();
 
-        var serializer = new JavaScriptSerializer();
-        var content = new StringContent(serializer.Serialize(returnData));
+        var content = new StringContent(JsonSerializer.Serialize(returnData));
 
         await httpClient.PostAsync(SplitWebhookUrl, content, token);
     }
@@ -245,8 +244,7 @@ public class CollectorComponent : LogicComponent
         result.EnsureSuccessStatusCode();
         string responseBody = await result.Content.ReadAsStringAsync();
 
-        var ser = new JavaScriptSerializer();
-        Dictionary<string, string> jsonObj = ser.Deserialize<Dictionary<string, string>>(responseBody);
+        Dictionary<string, string> jsonObj = JsonSerializer.Deserialize<Dictionary<string, string>>(responseBody);
 
         string url = HttpUtility.UrlDecode(jsonObj["url"]);
         string correctlyEncodedUrl = EncodeUrl(url);
@@ -377,7 +375,7 @@ public class CollectorComponent : LogicComponent
         return Settings.GetSettings(document);
     }
 
-    public override Control GetSettingsControl(LayoutMode mode)
+    public override object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

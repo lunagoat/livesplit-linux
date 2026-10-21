@@ -32,7 +32,8 @@ public class RacetimeChannel
 
     protected ITimerModel Model { get; set; }
 
-    private ClientWebSocket ws;
+    private IRacetimeSocket ws;
+    public Func<IRacetimeSocket> SocketFactory { get; set; } = () => new RacetimeSocket();
     protected List<ChatMessage> log = [];
     public int ConnectionError { get; set; }
     public bool IsConnected { get; set; }
@@ -174,7 +175,7 @@ public class RacetimeChannel
         websocket_cts = new CancellationTokenSource();
         RacetimeAuthenticator authenticator = RacetimeAPI.Instance.Authenticator;
 
-        using (ws = new ClientWebSocket())
+        using (ws = SocketFactory())
         {
             IsConnected = true;
 
@@ -206,7 +207,7 @@ public class RacetimeChannel
             }
 
             //opening the socket
-            ws.Options.SetRequestHeader("Authorization", $"Bearer {authenticator.AccessToken}");
+            ws.SetRequestHeader("Authorization", $"Bearer {authenticator.AccessToken}");
             Token = authenticator;
             try
             {
@@ -617,17 +618,15 @@ public class RacetimeChannel
                 IsConnected = false;
             }
             // Wait for a few seconds to not spam retry.
-            Thread.Sleep(5000);
+            await Task.Delay(5000);
         }
     }
 
     public void Disconnect()
     {
-        if (IsConnected)
-        {
-            websocket_cts?.Cancel();
-            websocket_cts = null;
-        }
+        websocket_cts?.Cancel();
+        Token?.StopPendingAuthRequest();
+        Token?.StopLocalEndpoint();
 
         reconnect_cts?.Cancel();
         reconnect_cts = null;
@@ -700,7 +699,6 @@ public class RacetimeChannel
     public void SendChannelMessage(string message)
     {
         message = message.Trim();
-        message = message.Replace("\"", "\\\"");
 
         DynamicJsonObject cmd = CreateCommand(message);
         SendChannelCommand(cmd.ToString());

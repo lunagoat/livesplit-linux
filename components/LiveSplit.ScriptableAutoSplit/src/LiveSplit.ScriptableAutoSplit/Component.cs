@@ -4,7 +4,7 @@ using LiveSplit.Options;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using System.Windows.Forms;
+using Timer = System.Timers.Timer;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
@@ -49,7 +49,11 @@ public class ASLComponent : LogicComponent
         // note: Timer isn't very reliable and quite often takes ~30ms
         // we need to switch to threading
         _update_timer = new Timer() { Interval = 15 };
-        _update_timer.Tick += (sender, args) => UpdateScript();
+        _update_timer.Elapsed += (sender, args) =>
+        {
+            if (_state.Form is { InvokeRequired: true }) _state.Form.Invoke((Action)UpdateScript);
+            else UpdateScript();
+        };
         _update_timer.Enabled = true;
     }
 
@@ -76,7 +80,7 @@ public class ASLComponent : LogicComponent
         _update_timer?.Dispose();
     }
 
-    public override Control GetSettingsControl(LayoutMode mode)
+    public override object GetSettingsControl(LayoutMode mode)
     {
         return _settings;
     }

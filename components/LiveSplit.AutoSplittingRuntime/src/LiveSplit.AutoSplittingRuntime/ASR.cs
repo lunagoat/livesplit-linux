@@ -22,11 +22,14 @@ public class RuntimeRefMut : RuntimeRef
 
 public class Runtime : RuntimeRefMut, IDisposable
 {
+    // Native code retains these callbacks until Runtime_drop.
+    private readonly Delegate[] callbacks;
     private void Drop()
     {
         if (ptr != IntPtr.Zero)
         {
             ASRNative.Runtime_drop(ptr);
+            GC.KeepAlive(callbacks);
             ptr = IntPtr.Zero;
         }
     }
@@ -57,6 +60,7 @@ public class Runtime : RuntimeRefMut, IDisposable
         LogDelegate log
     ) : base(IntPtr.Zero)
     {
+        callbacks = [state, index, segmentSplitted, start, split, skipSplit, undoSplit, reset, setGameTime, pauseGameTime, resumeGameTime, setCustomVariable, log];
         IntPtr settingsMapPtr = settingsMap?.ptr ?? IntPtr.Zero;
         settingsMap?.ptr = IntPtr.Zero;
 
@@ -718,6 +722,7 @@ public delegate void LogDelegate(IntPtr messagePtr, UIntPtr messageLen);
 
 public static class ASRNative
 {
+    static ASRNative() => ASRLoader.LoadASR();
     [DllImport("asr_capi", CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr Runtime_new(
         ASRString path,

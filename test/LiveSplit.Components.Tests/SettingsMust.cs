@@ -191,6 +191,8 @@ public class SettingsMust
 
     public static IEnumerable<object[]> SettingsTypes() =>
     [
+        [typeof(LiveSplit.UI.Components.CollectorSettings)],
+        [typeof(LiveSplit.UI.Components.ComponentSettings)],
         [typeof(TimerSettings)],
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],

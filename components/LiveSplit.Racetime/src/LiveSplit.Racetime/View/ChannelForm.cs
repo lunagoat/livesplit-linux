@@ -1,197 +1,53 @@
-﻿using DarkUI.Forms;
-using LiveSplit.Localization;
+﻿using LiveSplit.UI;
+using LiveSplit.Hosting;
 using LiveSplit.Racetime.Controller;
 using LiveSplit.Racetime.Model;
-using Microsoft.Web.WebView2.Core;
-using Ookii.Dialogs.WinForms;
 using System;
-using System.Diagnostics;
-using System.Reflection;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-
 namespace LiveSplit.Racetime.View;
 
-public partial class ChannelForm : DarkForm
+// The host subscribes to RacetimeAPI.ChannelOpened and displays this state.
+public sealed class ChannelForm : SettingsBase, IDisposable
 {
-    private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
-
-    public RacetimeChannel Channel { get; set; }
-
+    public RacetimeChannel Channel { get; }
+    public bool AlwaysOnTop { get; }
+    private string title;
+    public string Title => title;
+    public string PageUrl => Channel.Race == null ? null : Channel.FullWebRoot + Channel.Race.Id + "/livesplit";
+    public string LoadingMessage { get; private set; } = "Loading...";
+    public bool IsPageVisible { get; private set; }
     public ChannelForm(RacetimeChannel channel, string channelId, bool alwaysOnTop = true)
     {
-        Channel = channel;
-        Channel.Disconnected += Channel_Disconnected;
-        Channel.RaceChanged += Channel_RaceChanged;
-        Channel.Authorized += Channel_Authorized;
-        InitializeComponent();
-
-        string exePath = Assembly.GetEntryAssembly().CodeBase[8..];
-        Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-
-        Load += OnLoaded;
-        TopMost = alwaysOnTop;
-        Show();
-        chatBox.Hide();
-        Text = T("Connecting to ") + channelId[(channelId.IndexOf('/') + 1)..];
-        Channel.Connect(channelId);
-
-        chatBox.SourceChanged += OnSourceChanged;
-        chatBox.CoreWebView2InitializationCompleted += OnCoreWebViewCreated;
-        UiLocalizer.Apply(this, LanguageResolver.ResolveCurrentCultureLanguage());
+        Channel = channel; AlwaysOnTop = alwaysOnTop;
+        title = "Connecting to " + channelId[(channelId.IndexOf('/') + 1)..];
+        Channel.RaceChanged += RaceChanged;
+        Channel.Disconnected += Disconnected;
     }
-
-    private async void OnLoaded(object sender, EventArgs e)
+    public void Connect(string id) => Channel.Connect(id);
+    private void RaceChanged(object sender, EventArgs args)
     {
-        try
-        {
-            CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(userDataFolder: "WebView2_cache");
-            await chatBox.EnsureCoreWebView2Async(environment);
-        }
-        catch
-        {
-            // handled in OnCoreWebViewCreated
-        }
+        title = $"{Channel.Race.Goal} [{Channel.Race.GameName}] - {Channel.Race.ChannelName}";
+        OnPropertyChanged(nameof(Title)); OnPropertyChanged(nameof(PageUrl));
     }
-
-    private void OnCoreWebViewCreated(object sender, CoreWebView2InitializationCompletedEventArgs e)
+    private void Disconnected(object sender, EventArgs args) { title = "Disconnected"; OnPropertyChanged(nameof(Title)); }
+    public void PageLoaded(bool success)
     {
-        if (!e.IsSuccess)
-        {
-            ShowWebView2DownloadDialog();
-            return;
-        }
-
-        chatBox.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-        chatBox.CoreWebView2.AddWebResourceRequestedFilter(Channel.FullWebRoot + "*", CoreWebView2WebResourceContext.All);
+        IsPageVisible = success; LoadingMessage = success ? "" : "Error loading page.";
+        OnPropertyChanged(nameof(IsPageVisible)); OnPropertyChanged(nameof(LoadingMessage));
     }
-
-    private void OnSourceChanged(object sender, CoreWebView2SourceChangedEventArgs e)
-    {
-        if (chatBox.Source.ToString() != Channel.FullWebRoot + Channel.Race.Id + "/livesplit")
-        {
-            if (retries >= 5)
-            {
-                loadMessage.BeginInvoke(() => loadMessage.Text = T("Error loading page."));
-                chatBox = null;
-            }
-            else
-            {
-                Channel_RaceChanged(null, null);
-            }
-
-            if (LastRetry.AddSeconds(10) >= DateTime.Now)
-            {
-                LastRetry = DateTime.Now;
-                retries++;
-            }
-        }
-        else
-        {
-            chatBox.BeginInvoke(chatBox.Show);
-            retries = 0;
-        }
-    }
-
-    private int retries = 0;
-    private DateTime LastRetry = DateTime.Now;
-
-    private async void Channel_RaceChanged(object sender, EventArgs e)
-    {
-        try
-        {
-            if (!IsDisposed)
-            {
-                Text = $"{Channel.Race.Goal} [{Channel.Race.GameName}] - {Channel.Race.ChannelName}";
-
-                if (chatBox.Created)
-                {
-                    await Task.Delay(3000);
-
-                    if (retries <= 5)
-                    {
-                        if (Channel.Token != null)
-                        {
-                            chatBox.BeginInvoke(() => chatBox.Source = new Uri(Channel.FullWebRoot + Channel.Race.Id + "/livesplit"));
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-    }
-
-    private void OnWebResourceRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
-    {
-        // Channel.Token.AccessToken
-        if (!string.IsNullOrEmpty(Channel.Token.AccessToken))
-        {
-            CoreWebView2HttpRequestHeaders headers = e.Request.Headers;
-            if (e.Request.Uri.ToLower().Contains(Properties.Resources.PROTOCOL_REST.ToLower() + "://" + Properties.Resources.DOMAIN.ToLower()))
-            {
-                headers.SetHeader("Authorization", $"Bearer {Channel.Token.AccessToken}");
-            }
-        }
-    }
-
-    private void Channel_Authorized(object sender, EventArgs e)
-    {
-        chatBox.BeginInvoke(Focus);
-    }
-
-    private void Channel_Disconnected(object sender, EventArgs e)
-    {
-        if (!IsDisposed)
-        {
-            Text = T("Disconnected");
-        }
-    }
-
-    private void ChannelForm_FormClosing(object sender, FormClosingEventArgs e)
+    public bool RequestClose()
     {
         if (Channel.Race?.State == RaceState.Started && Channel.PersonalStatus == UserStatus.Racing)
         {
-            DialogResult r = MessageBox.Show(T("Do you want to FORFEIT before closing the window?"), "", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
-            if (r == DialogResult.Yes)
-            {
-                Channel.Forfeit();
-            }
-            else if (r == DialogResult.Cancel)
-            {
-                e.Cancel = true;
-                return;
-            }
+            var result = PlatformServices.Current.ShowMessage(this, "Do you want to FORFEIT before closing the window?", "", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (result == DialogResult.Cancel) return false;
+            if (result == DialogResult.Yes) Channel.Forfeit();
         }
-
-        Channel.RemoveRaceComparisons();
-        Channel.Authorized -= Channel_Authorized;
-        Channel.RaceChanged -= Channel_RaceChanged;
-        Channel.Disconnect();
+        Dispose(); return true;
     }
-
-    private void ShowWebView2DownloadDialog()
+    public void Dispose()
     {
-        if (InvokeRequired)
-        {
-            Invoke(ShowWebView2DownloadDialog);
-            return;
-        }
-
-        var downloadButton = new TaskDialogButton(T("Download")) { CommandLinkNote = T("This will open in your default web browser.") };
-        var closeButton = new TaskDialogButton(T("Close")) { CommandLinkNote = T("LiveSplit.Racetime will not work until runtimes are installed.") };
-
-        var dialog = new TaskDialog(Container);
-        dialog.CustomMainIcon = dialog.WindowIcon = Icon;
-        dialog.MainInstruction = dialog.WindowTitle = T("Microsoft Edge WebView2 Runtime Required");
-        dialog.Content = T("LiveSplit.Racetime requires the Microsoft Edge WebView2 Runtime to be installed on your machine in order to function. This should be included with Microsoft Edge, but we couldn't find it. Do you want to download it now?");
-        dialog.Buttons.Add(downloadButton);
-        dialog.Buttons.Add(closeButton);
-        dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
-        if (downloadButton == dialog.Show())
-        {
-            Process.Start("https://aka.ms/winui2/webview2download");
-        }
-
-        Close();
+        Channel.RaceChanged -= RaceChanged; Channel.Disconnected -= Disconnected;
+        Channel.RemoveRaceComparisons(); Channel.Disconnect();
     }
 }

@@ -2,7 +2,7 @@
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 using System;
-using System.Windows.Forms;
+
 using System.Xml;
 using Timer = System.Timers.Timer;
 
@@ -12,7 +12,7 @@ public class ASRComponent : LogicComponent
 {
     private readonly TimerModel model;
     private readonly ComponentSettings settings;
-    private readonly Form parentForm;
+    private readonly IFormHost parentForm;
     private Timer updateTimer;
 
     static ASRComponent()
@@ -68,7 +68,7 @@ public class ASRComponent : LogicComponent
         return settings.GetSettings(document);
     }
 
-    public override Control GetSettingsControl(LayoutMode mode)
+    public override object GetSettingsControl(LayoutMode mode)
     {
         return settings;
     }

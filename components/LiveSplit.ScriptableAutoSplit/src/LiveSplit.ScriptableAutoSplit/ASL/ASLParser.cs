@@ -1,105 +1,97 @@
-﻿using Irony.Parsing;
-using LiveSplit.ComponentUtil;
+﻿using LiveSplit.ComponentUtil;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Text;
-
 namespace LiveSplit.ASL;
 
-public class ASLParser
+// ASL's outer grammar is deliberately small. Roslyn tokenizes the embedded C#,
+// so braces in comments and string literals cannot terminate a method body.
+public static class ASLParser
 {
-    public static ASLScript Parse(string code)
+    public static ASLScript Parse(string code) => new Reader(code).Parse();
+    private sealed class Reader
     {
-        var grammar = new ASLGrammar();
-        var parser = new Parser(grammar);
-        ParseTree tree = parser.Parse(code);
-
-        if (tree.HasErrors())
+        private readonly string source;
+        private readonly SyntaxToken[] tokens;
+        private int position;
+        public Reader(string source)
         {
-            var error_msg = new StringBuilder("ASL parse error(s):");
-            foreach (Irony.LogMessage msg in parser.Context.CurrentParseTree.ParserMessages)
-            {
-                SourceLocation loc = msg.Location;
-                error_msg.Append($"\nat Line {loc.Line + 1}, Col {loc.Column + 1}: {msg.Message}");
-            }
-
-            throw new Exception(error_msg.ToString());
+            this.source = source ?? throw new ArgumentNullException(nameof(source));
+            tokens = SyntaxFactory.ParseTokens(source).Where(t => !t.IsKind(SyntaxKind.EndOfFileToken)).ToArray();
         }
-
-        ParseTreeNodeList root_childs = tree.Root.ChildNodes;
-        ParseTreeNode methods_node = root_childs.First(x => x.Term.Name == "methodList");
-        ParseTreeNode states_node = root_childs.First(x => x.Term.Name == "stateList");
-
-        var states = new Dictionary<string, List<ASLState>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (ParseTreeNode state_node in states_node.ChildNodes)
+        private string Current => position < tokens.Length ? tokens[position].Text : "<end>";
+        private Exception Error(string message)
         {
-            string process_name = (string)state_node.ChildNodes[2].Token.Value;
-            string version =
-                state_node.ChildNodes[3].ChildNodes.Skip(1).Select(x => (string)x.Token.Value).FirstOrDefault() ??
-                string.Empty;
-            ParseTreeNodeList value_definition_nodes = state_node.ChildNodes[6].ChildNodes;
-
-            var state = new ASLState();
-
-            foreach (ParseTreeNode value_definition_node in value_definition_nodes.Where(x => x.ChildNodes.Count > 0))
+            int offset = position < tokens.Length ? tokens[position].SpanStart : source.Length;
+            int line = source.Take(offset).Count(c => c == '\n') + 1;
+            return new FormatException($"ASL parse error at Line {line}: {message}; got '{Current}'.");
+        }
+        private SyntaxToken Take() => position < tokens.Length ? tokens[position++] : throw Error("Unexpected end of script");
+        private void Expect(string text) { if (Current != text) throw Error("Expected " + text); position++; }
+        private string String()
+        {
+            if (position >= tokens.Length || !tokens[position].IsKind(SyntaxKind.StringLiteralToken)) throw Error("Expected string literal");
+            return Take().ValueText;
+        }
+        private int Number()
+        {
+            bool negative = Current == "-";
+            if (negative || Current == "+") Take();
+            var token = Take();
+            if (!token.IsKind(SyntaxKind.NumericLiteralToken)) throw Error("Expected integer offset");
+            try
             {
-                ParseTreeNodeList child_nodes = value_definition_node.ChildNodes;
-                string type = (string)child_nodes[0].Token.Value;
-                string identifier = (string)child_nodes[1].Token.Value;
-                string module =
-                    child_nodes[3].ChildNodes.Take(1).Select(x => (string)x.Token.Value).FirstOrDefault() ??
-                    string.Empty;
-                int module_base = child_nodes[4].ChildNodes.Select(x => (int)x.Token.Value).First();
-                int[] offsets = [.. child_nodes[4].ChildNodes.Skip(1).Select(x => (int)x.Token.Value)];
-                var value_definition = new ASLValueDefinition()
+                long value = Convert.ToInt64(token.Value, CultureInfo.InvariantCulture);
+                return unchecked((int)(negative ? -value : value));
+            }
+            catch (Exception) { throw Error("Invalid integer offset"); }
+        }
+        public ASLScript Parse()
+        {
+            var states = new Dictionary<string, List<ASLState>>(StringComparer.OrdinalIgnoreCase);
+            var methods = new ASLScript.Methods();
+            while (Current == "state")
+            {
+                Take(); Expect("("); string process = String(); string version = "";
+                if (Current == ",") { Take(); version = String(); }
+                Expect(")"); Expect("{");
+                var state = new ASLState { GameVersion = version };
+                while (Current != "}")
                 {
-                    Identifier = identifier,
-                    Type = type,
-                    Pointer = new DeepPointer(module, module_base, offsets)
-                };
-                state.ValueDefinitions.Add(value_definition);
+                    if (Current == ";") { Take(); continue; }
+                    string type = Take().ValueText; string name = Take().ValueText; Expect(":");
+                    string module = "";
+                    if (position < tokens.Length && tokens[position].IsKind(SyntaxKind.StringLiteralToken)) { module = String(); Expect(","); }
+                    int moduleBase = Number(); var offsets = new List<int>();
+                    while (Current == ",") { Take(); offsets.Add(Number()); }
+                    state.ValueDefinitions.Add(new ASLValueDefinition { Type = type, Identifier = name, Pointer = new DeepPointer(module, moduleBase, offsets.ToArray()) });
+                    if (Current != "}") Expect(";");
+                }
+                Expect("}");
+                if (!states.TryGetValue(process, out var list)) states.Add(process, list = []);
+                list.Add(state);
             }
-
-            state.GameVersion = version;
-            if (!states.ContainsKey(process_name))
+            while (position < tokens.Length)
             {
-                states.Add(process_name, []);
+                string name = Take().ValueText;
+                var field = typeof(ASLScript.Methods).GetField(name);
+                if (field == null || field.FieldType != typeof(ASLMethod)) throw Error("Unknown method " + name);
+                if (Current != "{") throw Error("Expected method body");
+                int start = Take().Span.End, depth = 1, end = start;
+                while (depth > 0)
+                {
+                    var token = Take();
+                    if (token.IsKind(SyntaxKind.OpenBraceToken)) depth++;
+                    if (token.IsKind(SyntaxKind.CloseBraceToken)) depth--;
+                    if (depth == 0) end = token.SpanStart;
+                }
+                int line = source.Take(start).Count(c => c == '\n') + 1;
+                field.SetValue(methods, new ASLMethod(source[start..end], name, line) { ScriptMethods = methods });
             }
-
-            states[process_name].Add(state);
+            return new ASLScript(methods, states);
         }
-
-        var methods = new ASLScript.Methods();
-
-        foreach (ParseTreeNode method in methods_node.ChildNodes[0].ChildNodes)
-        {
-            string body = (string)method.ChildNodes[2].Token.Value;
-            string method_name = (string)method.ChildNodes[0].Token.Value;
-            int line = method.ChildNodes[2].Token.Location.Line + 1;
-            var script = new ASLMethod(body, method_name, line)
-            {
-                ScriptMethods = methods
-            };
-            switch (method_name)
-            {
-                case "init": methods.init = script; break;
-                case "exit": methods.exit = script; break;
-                case "update": methods.update = script; break;
-                case "start": methods.start = script; break;
-                case "split": methods.split = script; break;
-                case "isLoading": methods.isLoading = script; break;
-                case "gameTime": methods.gameTime = script; break;
-                case "reset": methods.reset = script; break;
-                case "startup": methods.startup = script; break;
-                case "shutdown": methods.shutdown = script; break;
-                case "onStart": methods.onStart = script; break;
-                case "onSplit": methods.onSplit = script; break;
-                case "onReset": methods.onReset = script; break;
-            }
-        }
-
-        return new ASLScript(methods, states);
     }
 }

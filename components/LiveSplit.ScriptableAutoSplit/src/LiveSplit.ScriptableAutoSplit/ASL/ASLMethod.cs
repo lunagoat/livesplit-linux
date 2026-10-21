@@ -1,5 +1,4 @@
-﻿using Basic.Reference.Assemblies;
-using LiveSplit.Model;
+﻿using LiveSplit.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -140,12 +139,10 @@ public class ASLMethod
 
     private static MetadataReference[] _scriptReferences;
     private static MetadataReference[] ScriptReferences => _scriptReferences ??=
-    [
-        .. ReferenceAssemblies.Net472,
-        MetadataReference.CreateFromFile(typeof(Span<byte>).Assembly.Location),
-        MetadataReference.CreateFromFile(typeof(System.Text.Json.JsonSerializer).Assembly.Location),
-        MetadataReference.CreateFromFile(typeof(LiveSplitState).Assembly.Location),
-    ];
+        ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")).Split(Path.PathSeparator)
+        .Append(typeof(LiveSplitState).Assembly.Location)
+        .Append(typeof(Microsoft.CSharp.RuntimeBinder.Binder).Assembly.Location)
+        .Distinct().Select(path => MetadataReference.CreateFromFile(path)).ToArray();
 
     private static CompilerErrorCollection ToCompilerErrors(IEnumerable<Diagnostic> diagnostics)
     {

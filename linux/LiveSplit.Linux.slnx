@@ -16,6 +16,7 @@
   </Folder>
   <!-- Ported components (net10.0, toolkit free). Add each newly ported component here, keep alphabetical. -->
   <Folder Name="/components/">
+    <Project Path="../components/LiveSplit.AutoSplittingRuntime/src/LiveSplit.AutoSplittingRuntime/LiveSplit.AutoSplittingRuntime.csproj" />
     <Project Path="../components/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
     <Project Path="../components/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
     <Project Path="../components/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
@@ -28,11 +29,14 @@
     <Project Path="../components/LiveSplit.ManualGameTime/src/LiveSplit.ManualGameTime/LiveSplit.ManualGameTime.csproj" />
     <Project Path="../components/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
     <Project Path="../components/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
+    <Project Path="../components/LiveSplit.Racetime/src/LiveSplit.Racetime/LiveSplit.Racetime.csproj" />
     <Project Path="../components/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />
     <Project Path="../components/LiveSplit.Subsplits/src/LiveSplit.Subsplits/LiveSplit.Subsplits.csproj" />
+    <Project Path="../components/LiveSplit.ScriptableAutoSplit/src/LiveSplit.ScriptableAutoSplit/LiveSplit.ScriptableAutoSplit.csproj" />
     <Project Path="../components/LiveSplit.Sound/src/LiveSplit.Sound/LiveSplit.Sound.csproj" />
     <Project Path="../components/LiveSplit.SumOfBest/src/LiveSplit.SumOfBest/LiveSplit.SumOfBest.csproj" />
     <Project Path="../components/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
+    <Project Path="../components/LiveSplit.TheRun/src/LiveSplit.TheRun/LiveSplit.TheRun.csproj" />
     <Project Path="../components/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
     <Project Path="../components/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
     <Project Path="../components/LiveSplit.TotalPlaytime/src/LiveSplit.TotalPlaytime/LiveSplit.TotalPlaytime.csproj" />
