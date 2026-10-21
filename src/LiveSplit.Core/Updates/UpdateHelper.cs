@@ -14,12 +14,14 @@ public static class UpdateHelper
     {
         try
         {
-            return Version.Parse($"{Git.LastTag}.{Git.CommitsSinceLastTag}");
+            return Version.TryParse($"{Git.LastTag}.{Git.CommitsSinceLastTag}", out Version version)
+                ? version
+                : new Version(1, 0, 0, 0);
         }
         catch (Exception ex)
         {
             Log.Error(ex);
-            return null;
+            return new Version(1, 0, 0, 0);
         }
     }
 
