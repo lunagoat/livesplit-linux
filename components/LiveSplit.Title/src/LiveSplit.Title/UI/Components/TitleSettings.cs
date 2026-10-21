@@ -1,44 +1,179 @@
 ﻿using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class TitleSettings : UserControl
+public class TitleSettings : SettingsBase
 {
-    public bool ShowGameName { get; set; }
-    public bool ShowCategoryName { get; set; }
-    public bool ShowAttemptCount { get; set; }
-    public bool ShowFinishedRunsCount { get; set; }
+    /// <summary>Items of the background gradient drop down (<see cref="GradientString"/>).</summary>
+    public static readonly string[] GradientOptions = [.. Enum.GetNames<GradientType>()];
+    /// <summary>Items of the text alignment drop down, indexed by <see cref="AlignmentType"/>.</summary>
+    public static readonly string[] TextAlignmentOptions = ["Automatic (Based on Icon)", "Left", "Center"];
+
+    private bool showGameName;
+    private bool showCategoryName;
+    private bool showAttemptCount;
+    private bool showFinishedRunsCount;
+    private AlignmentType textAlignment;
+    private bool singleLine;
+    private bool displayGameIcon;
+    private bool showRegion;
+    private bool showPlatform;
+    private bool showVariables;
+    private Color titleColor;
+    private bool overrideTitleColor;
+    private bool overrideTitleFont;
+    private Font titleFont;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private GradientType backgroundGradient;
+
+    public bool ShowGameName { get => showGameName; set => SetField(ref showGameName, value); }
+    public bool ShowCategoryName { get => showCategoryName; set => SetField(ref showCategoryName, value); }
+    public bool ShowAttemptCount
+    {
+        get => showAttemptCount;
+        set
+        {
+            if (SetField(ref showAttemptCount, value))
+            {
+                OnPropertyChanged(nameof(ShowCount));
+            }
+        }
+    }
+
+    public bool ShowFinishedRunsCount
+    {
+        get => showFinishedRunsCount;
+        set
+        {
+            if (SetField(ref showFinishedRunsCount, value))
+            {
+                OnPropertyChanged(nameof(ShowCount));
+            }
+        }
+    }
+
     public bool ShowCount => ShowAttemptCount || ShowFinishedRunsCount;
-    public AlignmentType TextAlignment { get; set; }
-    public bool SingleLine { get; set; }
-    public bool DisplayGameIcon { get; set; }
 
-    public bool ShowRegion { get; set; }
-    public bool ShowPlatform { get; set; }
-    public bool ShowVariables { get; set; }
+    public AlignmentType TextAlignment
+    {
+        get => textAlignment;
+        set
+        {
+            if (SetField(ref textAlignment, value))
+            {
+                OnPropertyChanged(nameof(TextAlignmentIndex));
+            }
+        }
+    }
 
-    public Color TitleColor { get; set; }
-    public bool OverrideTitleColor { get; set; }
+    /// <summary>The text alignment as the index into <see cref="TextAlignmentOptions"/>.</summary>
+    public int TextAlignmentIndex
+    {
+        get => (int)TextAlignment;
+        set => TextAlignment = (AlignmentType)value;
+    }
+
+    public bool SingleLine { get => singleLine; set => SetField(ref singleLine, value); }
+    public bool DisplayGameIcon { get => displayGameIcon; set => SetField(ref displayGameIcon, value); }
+
+    public bool ShowRegion { get => showRegion; set => SetField(ref showRegion, value); }
+    public bool ShowPlatform { get => showPlatform; set => SetField(ref showPlatform, value); }
+    public bool ShowVariables { get => showVariables; set => SetField(ref showVariables, value); }
+
+    public Color TitleColor { get => titleColor; set => SetField(ref titleColor, value); }
+    public bool OverrideTitleColor
+    {
+        get => overrideTitleColor;
+        set
+        {
+            if (SetField(ref overrideTitleColor, value))
+            {
+                OnPropertyChanged(nameof(IsTitleColorEnabled));
+            }
+        }
+    }
 
     // Legacy font override — read from old configs, not written or exposed in UI
-    public bool OverrideTitleFont { get; set; }
-    public Font TitleFont { get; set; }
+    public bool OverrideTitleFont { get => overrideTitleFont; set => SetField(ref overrideTitleFont, value); }
+    public Font TitleFont { get => titleFont; set => SetField(ref titleFont, value); }
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public GradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
+    // Computed, UI facing state that used to live in the WinForms event handlers.
+
+    /// <summary>The first background swatch is hidden for a plain background.</summary>
+    public bool IsColor1Visible => BackgroundGradient != GradientType.Plain;
+
+    /// <summary>
+    /// What the second background swatch edits: <see cref="BackgroundColor2"/> when the first swatch is visible,
+    /// otherwise (plain background) <see cref="BackgroundColor"/>.
+    /// </summary>
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
+    }
+
+    /// <summary>The "Color:" row of the "Title Color" group is enabled only while the layout colour is overridden.</summary>
+    public bool IsTitleColorEnabled => OverrideTitleColor;
+
     public TitleSettings()
     {
-        InitializeComponent();
         ShowGameName = true;
         ShowCategoryName = true;
         ShowAttemptCount = true;
@@ -54,45 +189,6 @@ public partial class TitleSettings : UserControl
         BackgroundColor2 = Color.FromArgb(255, 19, 19, 19);
         BackgroundGradient = GradientType.Vertical;
         TextAlignment = AlignmentType.Auto;
-
-        chkGameName.DataBindings.Add("Checked", this, "ShowGameName", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkCategoryName.DataBindings.Add("Checked", this, "ShowCategoryName", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkAttemptCount.DataBindings.Add("Checked", this, "ShowAttemptCount", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkFinishedRuns.DataBindings.Add("Checked", this, "ShowFinishedRunsCount", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkColor.DataBindings.Add("Checked", this, "OverrideTitleColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSingleLine.DataBindings.Add("Checked", this, "SingleLine", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor.DataBindings.Add("BackColor", this, "TitleColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkDisplayGameIcon.DataBindings.Add("Checked", this, "DisplayGameIcon", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkRegion.DataBindings.Add("Checked", this, "ShowRegion", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkPlatform.DataBindings.Add("Checked", this, "ShowPlatform", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkVariables.DataBindings.Add("Checked", this, "ShowVariables", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void TitleSettings_Load(object sender, EventArgs e)
-    {
-        chkColor_CheckedChanged(null, null);
-        cmbTextAlignment.SelectedIndex = (int)TextAlignment;
-    }
-
-    private void chkColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label3.Enabled = btnColor.Enabled = chkColor.Checked;
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnColor1.Visible = cmbGradientType.SelectedItem.ToString() != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
-    }
-
-    private void cmbTextAlignment_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        TextAlignment = (AlignmentType)cmbTextAlignment.SelectedIndex;
     }
 
     public void SetSettings(XmlNode node)
@@ -164,10 +260,5 @@ public partial class TitleSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "ShowPlatform", ShowPlatform) ^
         SettingsHelper.CreateSetting(document, parent, "ShowVariables", ShowVariables) ^
         SettingsHelper.CreateSetting(document, parent, "TextAlignment", (int)TextAlignment);
-    }
-
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
     }
 }

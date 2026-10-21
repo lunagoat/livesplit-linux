@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/linux/">
+    <Project Path="LiveSplit.App/LiveSplit.App.csproj" />
+    <Project Path="LiveSplit.Drawing/LiveSplit.Drawing.csproj" />
+    <Project Path="LiveSplit.Drawing.Tests/LiveSplit.Drawing.Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="../src/LiveSplit.Core/LiveSplit.Core.csproj" />
+  </Folder>
+  <Folder Name="/lib/">
+    <Project Path="../lib/SpeedrunComSharp/src/SpeedrunComSharp/SpeedrunComSharp.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="../test/LiveSplit.Components.Tests/LiveSplit.Components.Tests.csproj" />
+    <Project Path="../test/LiveSplit.Tests/LiveSplit.Tests.csproj" />
+  </Folder>
+  <!-- Ported components (net10.0, toolkit free). Add each newly ported component here, keep alphabetical. -->
+  <Folder Name="/components/">
+    <Project Path="../components/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
+    <Project Path="../components/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
+    <Project Path="../components/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
+    <Project Path="../components/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
+  </Folder>
+</Solution>

@@ -58,7 +58,7 @@ public class GraphSeparatorComponent : IComponent
 
     public string ComponentName => "Graph Separator";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotSupportedException();
     }

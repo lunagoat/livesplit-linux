@@ -577,7 +577,7 @@ public class SplitComponent : IComponent
 
     public string ComponentName => "Split";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotSupportedException();
     }

@@ -102,7 +102,7 @@ public class TotalPlaytimeComponent : IComponent
         return Settings.GetSettings(document);
     }
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

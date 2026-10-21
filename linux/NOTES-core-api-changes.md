@@ -33,6 +33,12 @@ Fonts and images in `.lsl`/`.lss` are `BinaryFormatter` blobs written by .NET Fr
 `GetImageFromElement` and both `CreateSetting` overloads now go through `LiveSplit.UI.DrawingSerialization`, which reads them with
 `System.Formats.Nrbf` and writes byte-identical `System.Drawing.Font` blobs (and `System.Drawing.Bitmap` blobs in the layout livesplit-core expects).
 
+## Component settings (UI toolkit decoupling, continued)
+
+New `LiveSplit.UI.SettingsBase` (`UI/SettingsBase.cs`): `INotifyPropertyChanged` base with `SetField(ref field, value, [CallerMemberName])` (returns whether the value changed) and `OnPropertyChanged`.
+Ported components' settings classes (`TimerSettings`, `TitleSettings`, ...) derive from it instead of `UserControl`; `IComponent.GetSettingsControl` returns that settings object and the UI layer maps it to an Avalonia view
+(contracts in `linux/ui-specs/`, recipe in `NOTES-component-port.md`). `components/Directory.Build.props` no longer copies Core/Drawing/SpeedrunComSharp into the `Components` output folder.
+
 ## Dialogs and services the UI layer must provide (`LiveSplit.Hosting.IPlatformServices`, assign `PlatformServices.Current`)
 
 `ShowMessage`, `ShowScrollableMessage`, `Prompt` (one and two fields), `Login` (username, password, remember),

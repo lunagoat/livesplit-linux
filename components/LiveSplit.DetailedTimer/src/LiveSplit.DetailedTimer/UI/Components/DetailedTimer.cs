@@ -264,7 +264,7 @@ public class DetailedTimer : IComponent
 
     public string ComponentName => "Detailed Timer";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

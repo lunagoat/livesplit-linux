@@ -100,7 +100,7 @@ public class LabelsComponent : IComponent
 
     public string ComponentName => "Labels";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotSupportedException();
     }

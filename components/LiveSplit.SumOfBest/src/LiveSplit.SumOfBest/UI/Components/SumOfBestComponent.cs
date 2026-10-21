@@ -150,7 +150,7 @@ public class SumOfBestComponent : IComponent
 
     public string ComponentName => "Sum of Best";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

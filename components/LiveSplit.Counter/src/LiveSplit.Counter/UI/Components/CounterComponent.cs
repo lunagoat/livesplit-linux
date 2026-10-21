@@ -125,7 +125,7 @@ public class CounterComponent : IComponent
 
     public string ComponentName => "Counter";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         return Settings;
     }

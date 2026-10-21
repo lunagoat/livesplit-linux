@@ -1,70 +1,157 @@
 ﻿using LiveSplit.Localization;
 using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class BlankSpaceSettings : UserControl
+public class BlankSpaceSettings : SettingsBase
 {
     private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
 
-    public float SpaceHeight { get; set; }
-    public float SpaceWidth { get; set; }
+    /// <summary>Items of the background gradient drop down (<see cref="GradientString"/>).</summary>
+    public static readonly string[] GradientOptions = [.. Enum.GetNames<GradientType>()];
 
-    public LayoutMode Mode { get; set; }
+    private float spaceHeight;
+    private float spaceWidth;
+    private LayoutMode mode;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private GradientType backgroundGradient;
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    public float SpaceHeight
+    {
+        get => spaceHeight;
+        set
+        {
+            if (SetField(ref spaceHeight, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
+    public float SpaceWidth
+    {
+        get => spaceWidth;
+        set
+        {
+            if (SetField(ref spaceWidth, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(SizeLabel));
+            }
+        }
+    }
+
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public GradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
+    // Computed, UI facing state that used to live in the WinForms event handlers.
+
+    /// <summary>The first background swatch is hidden for a plain background.</summary>
+    public bool IsColor1Visible => BackgroundGradient != GradientType.Plain;
+
+    /// <summary>
+    /// What the second background swatch edits: <see cref="BackgroundColor2"/> when the first swatch is visible,
+    /// otherwise (plain background) <see cref="BackgroundColor"/>.
+    /// </summary>
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
+    }
+
+    /// <summary>The width (horizontal layout) or height (vertical layout) slider.</summary>
+    public float SizeValue
+    {
+        get => Mode == LayoutMode.Horizontal ? SpaceWidth : SpaceHeight;
+        set
+        {
+            if (Mode == LayoutMode.Horizontal)
+            {
+                SpaceWidth = value;
+            }
+            else
+            {
+                SpaceHeight = value;
+            }
+        }
+    }
+    public float SizeMinimum => 1;
+    public float SizeMaximum => 1000;
+    public string SizeLabel => T(Mode == LayoutMode.Horizontal ? "Width:" : "Height:");
+
     public BlankSpaceSettings()
     {
-        InitializeComponent();
-
         SpaceHeight = 100;
         SpaceWidth = 100;
         BackgroundColor = Color.Transparent;
         BackgroundColor2 = Color.Transparent;
         BackgroundGradient = GradientType.Plain;
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        string selectedText = cmbGradientType.SelectedItem.ToString();
-        btnColor1.Visible = selectedText != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
-    }
-
-    private void BlankSpaceSettings_Load(object sender, EventArgs e)
-    {
-        if (Mode == LayoutMode.Horizontal)
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 1;
-            trkSize.Maximum = 1000;
-            trkSize.DataBindings.Add("Value", this, "SpaceWidth", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Width:");
-        }
-        else
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 1;
-            trkSize.Maximum = 1000;
-            trkSize.DataBindings.Add("Value", this, "SpaceHeight", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Height:");
-        }
     }
 
     public void SetSettings(XmlNode node)
@@ -99,10 +186,5 @@ public partial class BlankSpaceSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "BackgroundColor", BackgroundColor) ^
         SettingsHelper.CreateSetting(document, parent, "BackgroundColor2", BackgroundColor2) ^
         SettingsHelper.CreateSetting(document, parent, "BackgroundGradient", BackgroundGradient);
-    }
-
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
     }
 }

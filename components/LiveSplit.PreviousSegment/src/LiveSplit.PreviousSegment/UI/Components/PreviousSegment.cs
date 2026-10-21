@@ -104,7 +104,7 @@ public class PreviousSegment : IComponent
             ? ""
             : " (" + CompositeComparisons.GetShortComparisonName(Settings.Comparison) + ")");
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

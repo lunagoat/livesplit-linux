@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -242,7 +241,7 @@ public class Timer : IComponent
         DrawGeneral(g, state, HorizontalWidth, height);
     }
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

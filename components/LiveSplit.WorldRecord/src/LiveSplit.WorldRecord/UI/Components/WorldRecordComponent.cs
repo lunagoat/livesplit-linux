@@ -432,7 +432,7 @@ public class WorldRecordComponent : IComponent
         InternalComponent.DrawVertical(g, state, width, clipRegion);
     }
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

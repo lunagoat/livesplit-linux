@@ -465,7 +465,7 @@ public class GraphComponent : IComponent
 
     public string ComponentName => throw new NotImplementedException();
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         throw new NotSupportedException();
     }

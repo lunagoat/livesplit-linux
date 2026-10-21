@@ -90,7 +90,7 @@ public class CurrentComparison : IComponent
 
     public string ComponentName => T("Current Comparison");
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

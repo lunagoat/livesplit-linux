@@ -2,19 +2,64 @@
 using LiveSplit.TimeFormatters;
 using System;
 using System.Drawing;
-using System.Windows.Forms;
+using System.Linq;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class TimerSettings : UserControl
+public class TimerSettings : SettingsBase
 {
     private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
 
-    public float TimerHeight { get; set; }
-    public float TimerWidth { get; set; }
+    /// <summary>Items of the digits format drop down (<see cref="DigitsFormat"/>).</summary>
+    public static readonly string[] DigitsFormatOptions = ["1", "00:01", "0:00:01", "00:00:01"];
+    /// <summary>Items of the accuracy drop down (<see cref="Accuracy"/>); the first item is the empty string.</summary>
+    public static readonly string[] AccuracyOptions = ["", ".2", ".23", ".234"];
+    /// <summary>Items of the timing method drop down (<see cref="TimingMethod"/>).</summary>
+    public static readonly string[] TimingMethodOptions = ["Current Timing Method", "Real Time", "Game Time"];
+    /// <summary>Items of the background gradient drop down (<see cref="GradientString"/>), in enum order.</summary>
+    public static readonly string[] GradientOptions = [.. Enum.GetValues<DeltasGradientType>().Select(GetBackgroundTypeString)];
 
-    public float DecimalsSize { get; set; }
+    private float timerHeight;
+    private float timerWidth;
+    private float decimalsSize;
+    private string digitsFormat;
+    private string accuracy;
+    private LayoutMode mode;
+    private Color timerColor;
+    private bool overrideSplitColors;
+    private bool centerTimer;
+    private bool showGradient;
+    private string timingMethod;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private DeltasGradientType backgroundGradient;
+
+    public float TimerHeight
+    {
+        get => timerHeight;
+        set
+        {
+            if (SetField(ref timerHeight, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
+    public float TimerWidth
+    {
+        get => timerWidth;
+        set
+        {
+            if (SetField(ref timerWidth, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
+    public float DecimalsSize { get => decimalsSize; set => SetField(ref decimalsSize, value); }
 
     private string timerFormat
     {
@@ -34,33 +79,141 @@ public partial class TimerSettings : UserControl
             }
         }
     }
-    public string DigitsFormat { get; set; }
-    public string Accuracy { get; set; }
+    public string DigitsFormat { get => digitsFormat; set => SetField(ref digitsFormat, value); }
+    public string Accuracy { get => accuracy; set => SetField(ref accuracy, value); }
 
-    public LayoutMode Mode { get; set; }
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(SizeMinimum));
+                OnPropertyChanged(nameof(SizeMaximum));
+                OnPropertyChanged(nameof(SizeLabel));
+            }
+        }
+    }
 
-    public Color TimerColor { get; set; }
-    public bool OverrideSplitColors { get; set; }
+    public Color TimerColor { get => timerColor; set => SetField(ref timerColor, value); }
+    public bool OverrideSplitColors
+    {
+        get => overrideSplitColors;
+        set
+        {
+            if (SetField(ref overrideSplitColors, value))
+            {
+                OnPropertyChanged(nameof(IsTimerColorEnabled));
+            }
+        }
+    }
 
-    public bool CenterTimer { get; set; }
+    public bool CenterTimer { get => centerTimer; set => SetField(ref centerTimer, value); }
 
-    public bool ShowGradient { get; set; }
+    public bool ShowGradient { get => showGradient; set => SetField(ref showGradient, value); }
 
-    public string TimingMethod { get; set; }
+    public string TimingMethod { get => timingMethod; set => SetField(ref timingMethod, value); }
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public DeltasGradientType BackgroundGradient { get; set; }
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public DeltasGradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(IsColor2Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => GetBackgroundTypeString(BackgroundGradient);
         set => BackgroundGradient = (DeltasGradientType)Enum.Parse(typeof(DeltasGradientType), value.Replace(" ", ""));
     }
 
+    // Computed, UI facing state that used to live in the WinForms event handlers.
+
+    /// <summary>The first background swatch is only shown for the two colour gradients.</summary>
+    public bool IsColor1Visible => BackgroundGradient is not DeltasGradientType.Plain && !GradientString.Contains("Delta");
+
+    /// <summary>The second background swatch is hidden when the colour is derived from the timer colour.</summary>
+    public bool IsColor2Visible => !GradientString.Contains("Delta");
+
+    /// <summary>
+    /// What the second background swatch edits: <see cref="BackgroundColor2"/> when the first swatch is visible,
+    /// otherwise (plain background) <see cref="BackgroundColor"/>.
+    /// </summary>
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
+    }
+
+    /// <summary>The "Color:" row of the "Timer Color" group is enabled only while the layout colour is overridden.</summary>
+    public bool IsTimerColorEnabled => OverrideSplitColors;
+
+    /// <summary>The width (horizontal layout) or height (vertical layout) slider.</summary>
+    public float SizeValue
+    {
+        get => Mode == LayoutMode.Horizontal ? TimerWidth : TimerHeight;
+        set
+        {
+            if (Mode == LayoutMode.Horizontal)
+            {
+                TimerWidth = value;
+            }
+            else
+            {
+                TimerHeight = value;
+            }
+        }
+    }
+    public float SizeMinimum => Mode == LayoutMode.Horizontal ? 50 : 20;
+    public float SizeMaximum => Mode == LayoutMode.Horizontal ? 500 : 150;
+    public string SizeLabel => T(Mode == LayoutMode.Horizontal ? "Width:" : "Height:");
+
     public TimerSettings()
     {
-        InitializeComponent();
-
         TimerWidth = 225;
         TimerHeight = 50;
         DigitsFormat = "1";
@@ -74,53 +227,6 @@ public partial class TimerSettings : UserControl
         CenterTimer = false;
         TimingMethod = "Current Timing Method";
         DecimalsSize = 35f;
-
-        btnTimerColor.DataBindings.Add("BackColor", this, "TimerColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTimerColors.DataBindings.Add("Checked", this, "OverrideSplitColors", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkGradient.DataBindings.Add("Checked", this, "ShowGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "BackgroundGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkCenterTimer.DataBindings.Add("Checked", this, "CenterTimer", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbTimingMethod.DataBindings.Add("SelectedItem", this, "TimingMethod", false, DataSourceUpdateMode.OnPropertyChanged);
-        trkDecimalsSize.DataBindings.Add("Value", this, "DecimalsSize", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbDigitsFormat.DataBindings.Add("SelectedItem", this, "DigitsFormat", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbAccuracy.DataBindings.Add("SelectedItem", this, "Accuracy", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void cmbTimerFormat_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        DigitsFormat = cmbDigitsFormat.SelectedItem.ToString();
-    }
-
-    private void cmbAccuracy_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Accuracy = cmbAccuracy.SelectedItem.ToString();
-    }
-
-    private void cmbTimingMethod_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        TimingMethod = cmbTimingMethod.SelectedItem.ToString();
-    }
-
-    private void chkOverrideTimerColors_CheckedChanged(object sender, EventArgs e)
-    {
-        label1.Enabled = btnTimerColor.Enabled = chkOverrideTimerColors.Checked;
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        string selectedText = cmbGradientType.SelectedItem.ToString();
-        btnColor1.Visible = selectedText != "Plain" && !selectedText.Contains("Delta");
-        btnColor2.Visible = !selectedText.Contains("Delta");
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        BackgroundGradient = (DeltasGradientType)cmbGradientType.SelectedItem;
-    }
-
-    private void cmbGradientType_Format(object sender, ListControlConvertEventArgs e)
-    {
-        e.Value = GetBackgroundTypeString((DeltasGradientType)e.ListItem);
     }
 
     public static string GetBackgroundTypeString(DeltasGradientType type)
@@ -134,32 +240,6 @@ public partial class TimerSettings : UserControl
             DeltasGradientType.VerticalWithDeltaColor => "Vertical With Delta Color",
             _ => "Plain",
         };
-    }
-
-    private void TimerSettings_Load(object sender, EventArgs e)
-    {
-        chkOverrideTimerColors_CheckedChanged(null, null);
-
-        if (Mode == LayoutMode.Horizontal)
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 50;
-            trkSize.Maximum = 500;
-            trkSize.DataBindings.Add("Value", this, "TimerWidth", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Width:");
-        }
-        else
-        {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 20;
-            trkSize.Maximum = 150;
-            trkSize.DataBindings.Add("Value", this, "TimerHeight", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSize.Text = T("Height:");
-        }
-
-        DeltasGradientType tempType = BackgroundGradient;
-        cmbGradientType.DataSource = Enum.GetValues(typeof(DeltasGradientType));
-        cmbGradientType.SelectedItem = tempType;
     }
 
     public void SetSettings(XmlNode node)
@@ -234,10 +314,5 @@ public partial class TimerSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "CenterTimer", CenterTimer) ^
         SettingsHelper.CreateSetting(document, parent, "TimingMethod", TimingMethod) ^
         SettingsHelper.CreateSetting(document, parent, "DecimalsSize", DecimalsSize);
-    }
-
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
     }
 }

@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
@@ -294,7 +293,7 @@ public class Title : IComponent
 
     public string ComponentName => "Title";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         return Settings;
     }
