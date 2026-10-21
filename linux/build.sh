@@ -8,6 +8,8 @@ NATIVE_DIR="$ROOT_DIR/linux/native"
 
 SKIP_NATIVE=0
 RUN_VERIFY=0
+SELF_CONTAINED=0
+MAKE_TARBALL=0
 
 for arg in "$@"; do
     case "$arg" in
@@ -17,10 +19,19 @@ for arg in "$@"; do
         --verify)
             RUN_VERIFY=1
             ;;
+        --self-contained)
+            SELF_CONTAINED=1
+            ;;
+        --tarball)
+            SELF_CONTAINED=1
+            MAKE_TARBALL=1
+            ;;
         -h|--help)
             echo "Usage: $0 [options]"
             echo "  --skip-native    Skip rebuilding native Rust cdylib libraries"
             echo "  --verify         Run screenshot verification test after publishing"
+            echo "  --self-contained Bundle the .NET runtime (no dotnet install needed)"
+            echo "  --tarball        Implies --self-contained; also writes linux/dist/livesplit-linux-x64.tar.gz"
             exit 0
             ;;
     esac
@@ -50,12 +61,18 @@ else
     echo "==> Skipping native library builds (--skip-native)"
 fi
 
-echo "==> [3/3] Publishing LiveSplit.App (Release, linux-x64, framework-dependent)..."
+if [ "$SELF_CONTAINED" -eq 1 ]; then
+    SC_FLAG="--self-contained"
+    echo "==> [3/3] Publishing LiveSplit.App (Release, linux-x64, self-contained)..."
+else
+    SC_FLAG="--no-self-contained"
+    echo "==> [3/3] Publishing LiveSplit.App (Release, linux-x64, framework-dependent)..."
+fi
 mkdir -p "$OUTPUT_DIR"
 dotnet publish "$ROOT_DIR/linux/LiveSplit.App/LiveSplit.App.csproj" \
     -c Release \
     -r linux-x64 \
-    --no-self-contained \
+    $SC_FLAG \
     -o "$OUTPUT_DIR"
 
 # Ensure native libraries are present next to executable
@@ -79,6 +96,16 @@ mkdir -p "$OUTPUT_DIR/Resources"
 cp -r "$ROOT_DIR/res/"* "$OUTPUT_DIR/Resources/"
 
 echo "==> Build complete: $OUTPUT_DIR"
+
+if [ "$MAKE_TARBALL" -eq 1 ]; then
+    # Tarball layout: livesplit/{LiveSplit,...} plus the files install.sh needs.
+    cp -f "$SCRIPT_DIR/packaging/livesplit-ctl" "$SCRIPT_DIR/packaging/livesplit.desktop" \
+          "$SCRIPT_DIR/packaging/livesplit.xml" "$OUTPUT_DIR/"
+    cp -f "$ROOT_DIR/LICENSE" "$OUTPUT_DIR/LICENSE"
+    TARBALL="$ROOT_DIR/linux/dist/livesplit-linux-x64.tar.gz"
+    tar -C "$ROOT_DIR/linux/dist" -czf "$TARBALL" livesplit
+    echo "==> Tarball: $TARBALL ($(du -h "$TARBALL" | cut -f1))"
+fi
 
 if [ "$RUN_VERIFY" -eq 1 ]; then
     echo "==> Verifying published build..."

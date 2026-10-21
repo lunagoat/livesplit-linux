@@ -11,6 +11,20 @@ This port maintains the core C# application logic, timing engine, and `.lss` / `
 
 ---
 
+## Quick Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/lunagoat/livesplit-linux/linux-native/linux/install.sh | sh
+```
+
+Installs a self-contained x86_64 build (bundled .NET runtime, no root) to `~/.local`, adds a desktop entry and `.lss`/`.lsl` file types, and puts `livesplit` and `livesplit-ctl` in `~/.local/bin`. Re-run to update. Remove with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/lunagoat/livesplit-linux/linux-native/linux/install.sh | sh -s -- --uninstall
+```
+
+Your splits and settings in `~/.config/LiveSplit` are never touched.
+
 ## Feature & Component Status
 
 ### Component Support
