@@ -13,6 +13,11 @@
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
     <ProjectReference Include="$(ComponentsPath)/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.CurrentComparison/src/LiveSplit.CurrentComparison/LiveSplit.CurrentComparison.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.Delta/src/LiveSplit.Delta/LiveSplit.Delta.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
+    <ProjectReference Include="$(ComponentsPath)/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
   </ItemGroup>
 
   <ItemGroup>

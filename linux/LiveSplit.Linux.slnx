@@ -18,6 +18,11 @@
   <Folder Name="/components/">
     <Project Path="../components/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
     <Project Path="../components/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
+    <Project Path="../components/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
+    <Project Path="../components/LiveSplit.CurrentComparison/src/LiveSplit.CurrentComparison/LiveSplit.CurrentComparison.csproj" />
+    <Project Path="../components/LiveSplit.Delta/src/LiveSplit.Delta/LiveSplit.Delta.csproj" />
+    <Project Path="../components/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
+    <Project Path="../components/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
     <Project Path="../components/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
     <Project Path="../components/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
     <Project Path="../components/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
