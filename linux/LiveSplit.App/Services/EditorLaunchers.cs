@@ -1,4 +1,4 @@
-using LiveSplit.Model;
+﻿using LiveSplit.Model;
 using LiveSplit.Model.Input;
 using LiveSplit.Options;
 using LiveSplit.UI;
@@ -271,7 +271,7 @@ public sealed class DefaultRaceDialogLauncher : IRaceDialogLauncher
 /// <summary>Service locator for the pluggable dialogs. Replace the defaults at startup, before the window is created.</summary>
 public static class AppServices
 {
-    public static IRunEditorLauncher RunEditor { get; set; } = new DefaultRunEditorLauncher();
+    public static IRunEditorLauncher RunEditor { get; set; } = new LiveSplit.View.RunEditor.RunEditorLauncher();
     public static ILayoutEditorLauncher LayoutEditor { get; set; } = new DefaultLayoutEditorLauncher();
     public static ISettingsDialogLauncher SettingsDialog { get; set; } = new DefaultSettingsDialogLauncher();
     public static IShareDialogLauncher ShareDialog { get; set; } = new DefaultShareDialogLauncher();

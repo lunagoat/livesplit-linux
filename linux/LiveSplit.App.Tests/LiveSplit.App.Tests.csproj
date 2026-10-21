@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <HeadlessVersion Condition="'$(HeadlessVersion)' == ''">11.3.9</HeadlessVersion>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <NoWarn>$(NoWarn);CA1416;CS0618;NU1701</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LiveSplit.App/LiveSplit.App.csproj" />
+    <PackageReference Include="Avalonia.Headless" Version="$(HeadlessVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(HeadlessVersion)" />
+    <PackageReference Include="Avalonia.Skia" Version="$(HeadlessVersion)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <None Include="Samples/*.lss" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
