@@ -4,7 +4,6 @@ using LiveSplit.UI.Components;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace LiveSplit;
 
@@ -76,7 +75,7 @@ public class HotkeyIndicator : IComponent
 
     public string ComponentName => "Hotkey Indicator";
 
-    public Control GetSettingsControl(LayoutMode mode)
+    public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
         return Settings;

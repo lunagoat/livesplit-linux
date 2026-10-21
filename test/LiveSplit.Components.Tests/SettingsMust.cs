@@ -1,4 +1,4 @@
-using LiveSplit.TimeFormatters;
+﻿using LiveSplit.TimeFormatters;
 using LiveSplit.UI;
 using LiveSplit.UI.Components;
 using System;
@@ -204,6 +204,9 @@ public class SettingsMust
         [typeof(RunPredictionSettings)],
         [typeof(TotalPlaytimeSettings)],
         [typeof(WorldRecordSettings)],
+        [typeof(CounterComponentSettings)],
+        [typeof(HotkeyIndicatorSettings)],
+        [typeof(ManualGameTimeSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>
@@ -212,6 +215,7 @@ public class SettingsMust
     public void RaisePropertyChangedForEverySettableProperty(Type type)
     {
         var settings = type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
+        using var disposable = settings as IDisposable;
         var raised = new List<string>();
         settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
@@ -242,6 +246,11 @@ public class SettingsMust
         if (property.Name is "GradientString" or "SplitGradientString")
         {
             return (string)current == "Vertical" ? "Horizontal" : "Vertical";
+        }
+
+        if (t == typeof(LiveSplit.Model.Input.KeyOrButton))
+        {
+            return new LiveSplit.Model.Input.KeyOrButton(System.Windows.Forms.Keys.F12);
         }
 
         if (t == typeof(bool))

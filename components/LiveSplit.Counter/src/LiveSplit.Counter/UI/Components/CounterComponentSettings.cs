@@ -7,14 +7,13 @@ using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class CounterComponentSettings : UserControl
+public class CounterComponentSettings : SettingsBase, IDisposable
 {
+    public CompositeHook Hook { get; }
+    public CounterComponentSettings() : this(false) { }
     public CounterComponentSettings(bool allowGamepads)
     {
-        InitializeComponent();
-
         Hook = new CompositeHook(allowGamepads);
-
         // Set default values.
         GlobalHotkeysEnabled = false;
         CounterTextColor = Color.FromArgb(255, 255, 255, 255);
@@ -32,59 +31,57 @@ public partial class CounterComponentSettings : UserControl
         DecrementKey = new KeyOrButton(Keys.Subtract);
         ResetKey = new KeyOrButton(Keys.NumPad0);
 
-        // Set bindings.
-        txtCounterText.DataBindings.Add("Text", this, "CounterText");
-        numInitialValue.DataBindings.Add("Value", this, "InitialValue");
-        numIncrement.DataBindings.Add("Value", this, "Increment");
-        chkGlobalHotKeys.DataBindings.Add("Checked", this, "GlobalHotkeysEnabled", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkColor.DataBindings.Add("Checked", this, "OverrideTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor.DataBindings.Add("BackColor", this, "CounterTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor3.DataBindings.Add("BackColor", this, "CounterValueColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        // Assign event handlers.
-        cmbGradientType.SelectedIndexChanged += cmbGradientType_SelectedIndexChanged;
-        chkColor.CheckedChanged += chkColor_CheckedChanged;
-        chkGlobalHotKeys.CheckedChanged += chkGlobalHotKeys_CheckedChanged;
-
-        Load += CounterSettings_Load;
-
-        RegisterHotKeys();
     }
 
-    public CompositeHook Hook { get; set; }
+    private bool globalHotkeysEnabled;
+    public bool GlobalHotkeysEnabled { get => globalHotkeysEnabled; set => SetField(ref globalHotkeysEnabled, value); }
 
-    public bool GlobalHotkeysEnabled { get; set; }
+    private Color counterTextColor;
+    public Color CounterTextColor { get => counterTextColor; set => SetField(ref counterTextColor, value); }
+    private Color counterValueColor;
+    public Color CounterValueColor { get => counterValueColor; set => SetField(ref counterValueColor, value); }
+    private bool overrideTextColor;
+    public bool OverrideTextColor { get => overrideTextColor; set { if (SetField(ref overrideTextColor, value)) { OnPropertyChanged(nameof(IsCounterColorEnabled)); } } }
 
-    public Color CounterTextColor { get; set; }
-    public Color CounterValueColor { get; set; }
-    public bool OverrideTextColor { get; set; }
-
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    private Color backgroundColor;
+    public Color BackgroundColor { get => backgroundColor; set { if (SetField(ref backgroundColor, value)) { OnPropertyChanged(nameof(BackgroundSwatch2Color)); } } }
+    private Color backgroundColor2;
+    public Color BackgroundColor2 { get => backgroundColor2; set { if (SetField(ref backgroundColor2, value)) { OnPropertyChanged(nameof(BackgroundSwatch2Color)); } } }
+    private GradientType backgroundGradient;
+    public GradientType BackgroundGradient { get => backgroundGradient; set { if (SetField(ref backgroundGradient, value)) { OnPropertyChanged(nameof(GradientString)); OnPropertyChanged(nameof(IsColor1Visible)); OnPropertyChanged(nameof(BackgroundSwatch2Color)); } } }
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
-    public string CounterText { get; set; }
-    public int InitialValue { get; set; }
-    public int Increment { get; set; }
+    private string counterText;
+    public string CounterText { get => counterText; set => SetField(ref counterText, value); }
+    private int initialValue;
+    public int InitialValue { get => initialValue; set { if (SetField(ref initialValue, value)) { CounterReinitialiseRequired?.Invoke(this, EventArgs.Empty); } } }
+    private int increment;
+    public int Increment { get => increment; set { if (SetField(ref increment, value)) { IncrementUpdateRequired?.Invoke(this, EventArgs.Empty); } } }
 
     // Legacy font override — read from old configs, not written or exposed in UI
-    public bool OverrideCounterFont { get; set; }
-    public Font CounterFont { get; set; }
+    private bool overrideCounterFont;
+    public bool OverrideCounterFont { get => overrideCounterFont; set => SetField(ref overrideCounterFont, value); }
+    private Font counterFont;
+    public Font CounterFont { get => counterFont; set => SetField(ref counterFont, value); }
 
-    public KeyOrButton IncrementKey { get; set; }
-    public KeyOrButton DecrementKey { get; set; }
-    public KeyOrButton ResetKey { get; set; }
+    private KeyOrButton incrementKey;
+    public KeyOrButton IncrementKey { get => incrementKey; set { if (SetField(ref incrementKey, value)) { RegisterHotKeys(); } } }
+    private KeyOrButton decrementKey;
+    public KeyOrButton DecrementKey { get => decrementKey; set { if (SetField(ref decrementKey, value)) { RegisterHotKeys(); } } }
+    private KeyOrButton resetKey;
+    public KeyOrButton ResetKey { get => resetKey; set { if (SetField(ref resetKey, value)) { RegisterHotKeys(); } } }
 
     public event EventHandler CounterReinitialiseRequired;
     public event EventHandler IncrementUpdateRequired;
+
+    public static readonly string[] GradientOptions = ["Plain", "Vertical", "Horizontal"];
+    public bool IsCounterColorEnabled => OverrideTextColor;
+    public bool IsColor1Visible => BackgroundGradient != GradientType.Plain;
+    public Color BackgroundSwatch2Color { get => IsColor1Visible ? BackgroundColor2 : BackgroundColor; set { if (IsColor1Visible) BackgroundColor2 = value; else BackgroundColor = value; } }
 
     public void SetSettings(XmlNode node)
     {
@@ -142,228 +139,14 @@ public partial class CounterComponentSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "ResetKey", ResetKey);
     }
 
-    // Behaviour essentially Lifted from LiveSplit Settings.
-    private void SetHotkeyHandlers(TextBox txtBox, Action<KeyOrButton> keySetCallback)
-    {
-        string oldText = txtBox.Text;
-        txtBox.Text = "Set Hotkey...";
-        txtBox.Select(0, 0);
-
-        KeyEventHandler handlerDown = null;
-        KeyEventHandler handlerUp = null;
-        EventHandler leaveHandler = null;
-        EventHandlerT<GamepadButton> gamepadButtonPressed = null;
-
-        // Remove Input handlers.
-        void unregisterEvents()
-        {
-            txtBox.KeyDown -= handlerDown;
-            txtBox.KeyUp -= handlerUp;
-            txtBox.Leave -= leaveHandler;
-            Hook.AnyGamepadButtonPressed -= gamepadButtonPressed;
-        }
-
-        // Handler for KeyDown
-        handlerDown = (s, x) =>
-        {
-            KeyOrButton keyOrButton = x.KeyCode == Keys.Escape ? null : new KeyOrButton(x.KeyCode | x.Modifiers);
-
-            // No action for special keys.
-            if (x.KeyCode is Keys.ControlKey or Keys.ShiftKey or Keys.Menu)
-            {
-                return;
-            }
-
-            keySetCallback(keyOrButton);
-            unregisterEvents();
-
-            // Remove Focus.
-            txtBox.Select(0, 0);
-            chkGlobalHotKeys.Select();
-
-            txtBox.Text = FormatKey(keyOrButton);
-
-            // Re-Register inputs.
-            RegisterHotKeys();
-        };
-
-        // Handler for KeyUp (allows setting of special keys, shift, ctrl etc.).
-        handlerUp = (s, x) =>
-        {
-            KeyOrButton keyOrButton = x.KeyCode == Keys.Escape ? null : new KeyOrButton(x.KeyCode | x.Modifiers);
-
-            // No action for normal keys.
-            if (x.KeyCode is not Keys.ControlKey and not Keys.ShiftKey and not Keys.Menu)
-            {
-                return;
-            }
-
-            keySetCallback(keyOrButton);
-            unregisterEvents();
-            txtBox.Select(0, 0);
-            chkGlobalHotKeys.Select();
-            txtBox.Text = FormatKey(keyOrButton);
-            RegisterHotKeys();
-        };
-
-        leaveHandler = (s, x) =>
-        {
-            unregisterEvents();
-            txtBox.Text = oldText;
-        };
-
-        // Handler for gamepad/joystick inputs.
-        gamepadButtonPressed = (s, x) =>
-        {
-            var key = new KeyOrButton(x);
-            keySetCallback(key);
-            unregisterEvents();
-
-            Action keyOrButton = () =>
-            {
-                txtBox.Select(0, 0);
-                chkGlobalHotKeys.Select();
-                txtBox.Text = FormatKey(key);
-                RegisterHotKeys();
-            };
-
-            // May not be in the UI thread (likely).
-            if (InvokeRequired)
-            {
-                Invoke(keyOrButton);
-            }
-            else
-            {
-                keyOrButton();
-            }
-        };
-
-        txtBox.KeyDown += handlerDown;
-        txtBox.KeyUp += handlerUp;
-        txtBox.Leave += leaveHandler;
-
-        Hook.AnyGamepadButtonPressed += gamepadButtonPressed;
-    }
-
-    /// <summary>
-    /// Registers the hot keys (unregisters existing Hotkeys).
-    /// </summary>
     private void RegisterHotKeys()
     {
-        txtIncrement.Text = FormatKey(IncrementKey);
-        txtDecrement.Text = FormatKey(DecrementKey);
-        txtReset.Text = FormatKey(ResetKey);
-
-        try
-        {
-            UnregisterAllHotkeys(Hook);
-
-            Hook.RegisterHotKey(IncrementKey);
-            Hook.RegisterHotKey(DecrementKey);
-            Hook.RegisterHotKey(ResetKey);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex);
-        }
+        Hook.UnregisterAllHotkeys();
+        if (IncrementKey != null) Hook.RegisterHotKey(IncrementKey);
+        if (DecrementKey != null) Hook.RegisterHotKey(DecrementKey);
+        if (ResetKey != null) Hook.RegisterHotKey(ResetKey);
     }
 
-    /// <summary>
-    /// Unregisters all hotkeys.
-    /// </summary>
-    public void UnregisterAllHotkeys(CompositeHook hook)
-    {
-        hook.UnregisterAllHotkeys();
-        HotkeyHook.Instance.UnregisterAllHotkeys();
-    }
-
-    private string FormatKey(KeyOrButton key)
-    {
-        if (key == null)
-        {
-            return "None";
-        }
-
-        string str = key.ToString();
-        if (key.IsButton)
-        {
-            int length = str.LastIndexOf(' ');
-            if (length != -1)
-            {
-                str = str[..length];
-            }
-        }
-
-        return str;
-    }
-
-    private void CounterSettings_Load(object sender, EventArgs e)
-    {
-        chkColor_CheckedChanged(null, null);
-    }
-
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
-
-    private void chkColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label3.Enabled = btnColor.Enabled = label5.Enabled = btnColor3.Enabled = chkColor.Checked;
-    }
-
-    private void chkGlobalHotKeys_CheckedChanged(object sender, EventArgs e)
-    {
-        GlobalHotkeysEnabled = chkGlobalHotKeys.Checked;
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnColor1.Visible = cmbGradientType.SelectedItem.ToString() != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
-    }
-
-    private void txtIncrement_Enter(object sender, EventArgs e)
-    {
-        SetHotkeyHandlers((TextBox)sender, x => IncrementKey = x);
-    }
-
-    private void txtIncrement_KeyDown(object sender, KeyEventArgs e)
-    {
-        e.SuppressKeyPress = true;
-    }
-
-    private void txtDecrement_Enter(object sender, EventArgs e)
-    {
-        SetHotkeyHandlers((TextBox)sender, x => DecrementKey = x);
-    }
-
-    private void txtDecrement_KeyDown(object sender, KeyEventArgs e)
-    {
-        e.SuppressKeyPress = true;
-    }
-
-    private void txtReset_Enter(object sender, EventArgs e)
-    {
-        SetHotkeyHandlers((TextBox)sender, x => ResetKey = x);
-    }
-
-    private void txtReset_KeyDown(object sender, KeyEventArgs e)
-    {
-        e.SuppressKeyPress = true;
-    }
-
-    private void numInitialValue_ValueChanged(object sender, EventArgs e)
-    {
-        InitialValue = (int)Math.Round(numInitialValue.Value, 0);
-        CounterReinitialiseRequired(this, EventArgs.Empty);
-    }
-
-    private void numIncrement_ValueChanged(object sender, EventArgs e)
-    {
-        Increment = (int)Math.Round(numIncrement.Value, 0);
-        IncrementUpdateRequired(this, EventArgs.Empty);
-    }
+    public void UnregisterAllHotkeys(CompositeHook hook) => hook.UnregisterAllHotkeys();
+    public void Dispose() => Hook.Dispose();
 }

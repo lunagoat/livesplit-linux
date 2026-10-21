@@ -19,8 +19,11 @@
     <Project Path="../components/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
     <Project Path="../components/LiveSplit.Splits/src/LiveSplit.Splits/LiveSplit.Splits.csproj" />
     <Project Path="../components/LiveSplit.ComparisonTime/src/LiveSplit.ComparisonTime/LiveSplit.ComparisonTime.csproj" />
+    <Project Path="../components/LiveSplit.Counter/src/LiveSplit.Counter/LiveSplit.Counter.csproj" />
     <Project Path="../components/LiveSplit.CurrentComparison/src/LiveSplit.CurrentComparison/LiveSplit.CurrentComparison.csproj" />
     <Project Path="../components/LiveSplit.Delta/src/LiveSplit.Delta/LiveSplit.Delta.csproj" />
+    <Project Path="../components/LiveSplit.HotkeyIndicator/src/LiveSplit.HotkeyIndicator/LiveSplit.HotkeyIndicator.csproj" />
+    <Project Path="../components/LiveSplit.ManualGameTime/src/LiveSplit.ManualGameTime/LiveSplit.ManualGameTime.csproj" />
     <Project Path="../components/LiveSplit.PossibleTimeSave/src/LiveSplit.PossibleTimeSave/LiveSplit.PossibleTimeSave.csproj" />
     <Project Path="../components/LiveSplit.PreviousSegment/src/LiveSplit.PreviousSegment/LiveSplit.PreviousSegment.csproj" />
     <Project Path="../components/LiveSplit.RunPrediction/src/LiveSplit.RunPrediction/LiveSplit.RunPrediction.csproj" />

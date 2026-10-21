@@ -91,6 +91,24 @@ public class WorldRecordTests
         Assert.True(settings.CenteredTextShown);
     }
 
+    [Fact]
+    public void NamedRenderFixturesKeepMetadataOffline()
+    {
+        // Exercise the shared fixture that previously queued online metadata work
+        // before these render tests. Names remain available to drawing code.
+        for (int i = 0; i < 100; i++)
+        {
+            IRun run = TestSupport.CreateRun();
+            Assert.Equal("Super Metroid", run.GameName);
+            Assert.Equal("Any% (Japan)", run.CategoryName);
+            Assert.Null(run.Metadata.LiveSplitRun.GameName);
+            Assert.Null(run.Metadata.LiveSplitRun.CategoryName);
+            Assert.Null(run.Metadata.Game);
+            Assert.Null(run.Metadata.Category);
+            Assert.False(run.Metadata.GameAvailable || run.Metadata.CategoryAvailable);
+        }
+    }
+
     [Theory]
     [InlineData(LayoutMode.Vertical)]
     [InlineData(LayoutMode.Horizontal)]
