@@ -51,7 +51,7 @@ internal static class TestSupport
             string baseDir = Path.Combine(Path.GetTempPath(), "livesplit-component-tests-host-" + Environment.ProcessId);
             string componentsDir = Path.Combine(baseDir, ComponentManager.PATH_COMPONENTS);
             Directory.CreateDirectory(componentsDir);
-            foreach (string name in new[] { "LiveSplit.Timer", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace" })
+            foreach (string name in new[] { "LiveSplit.Timer", "LiveSplit.Title", "LiveSplit.Text", "LiveSplit.BlankSpace", "LiveSplit.Splits" })
             {
                 File.Copy(Path.Combine(AppContext.BaseDirectory, name + ".dll"), Path.Combine(componentsDir, name + ".dll"), true);
             }
