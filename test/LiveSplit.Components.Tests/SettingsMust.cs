@@ -204,6 +204,8 @@ public class SettingsMust
         [typeof(RunPredictionSettings)],
         [typeof(TotalPlaytimeSettings)],
         [typeof(WorldRecordSettings)],
+        [typeof(SoundSettings)],
+        [typeof(LiveSplit.Video.VideoSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>
@@ -243,6 +245,10 @@ public class SettingsMust
         {
             return (string)current == "Vertical" ? "Horizontal" : "Vertical";
         }
+
+        if (property.Name == "OffsetString") return "12.25";
+        if (t == typeof(TimeSpan)) return (TimeSpan)current + TimeSpan.FromSeconds(1);
+        if (t == typeof(Dictionary<EventType, SoundData>)) return new Dictionary<EventType, SoundData>((Dictionary<EventType, SoundData>)current);
 
         if (t == typeof(bool))
         {

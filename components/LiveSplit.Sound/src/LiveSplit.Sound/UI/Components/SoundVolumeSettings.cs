@@ -1,27 +1,29 @@
-﻿using System;
-using System.Windows.Forms;
+﻿namespace LiveSplit.UI.Components;
 
-namespace LiveSplit.UI.Components;
-
-public partial class SoundVolumeSettings : UserControl
+public class SoundVolumeSettings : SettingsBase
 {
-    public SoundData Data { get; set; }
+    private SoundData data;
+    public string Label { get; }
+    public SoundData Data
+    {
+        get => data;
+        set
+        {
+            if (ReferenceEquals(data, value)) return;
+            if (data != null) data.PropertyChanged -= DataChanged;
+            SetField(ref data, value);
+            if (data != null) data.PropertyChanged += DataChanged;
+            OnPropertyChanged(nameof(Volume));
+        }
+    }
     public int Volume { get => Data.Volume; set => Data.Volume = value; }
-
     public SoundVolumeSettings(EventType eventType, SoundData data)
     {
-        InitializeComponent();
-
+        Label = eventType.GetName();
         Data = data;
-
-        lblName.Text = eventType.GetName();
-        tbVolume.DataBindings.Add("Value", this, nameof(Volume));
     }
-
-    private void VolumeTrackBarScrollHandler(object sender, EventArgs e)
+    private void DataChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        var trackBar = (TrackBar)sender;
-
-        ttVolume.SetToolTip(trackBar, trackBar.Value.ToString());
+        if (e.PropertyName == nameof(SoundData.Volume)) OnPropertyChanged(nameof(Volume));
     }
 }
