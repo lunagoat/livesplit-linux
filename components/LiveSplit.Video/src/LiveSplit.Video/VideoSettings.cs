@@ -1,65 +1,70 @@
-﻿using LiveSplit.Localization;
+﻿using LiveSplit.Hosting;
+using LiveSplit.Localization;
 using LiveSplit.Model;
 using LiveSplit.Options;
 using LiveSplit.TimeFormatters;
 using LiveSplit.UI;
 using System;
 using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using System.Web;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.Video;
 
-public partial class VideoSettings : UserControl
+public class VideoSettings : SettingsBase
 {
+    private string videoPath = "";
+    private TimeSpan offset;
+    private float height = 200, width = 200;
+    private LayoutMode mode;
+    private readonly ITimeFormatter timeFormatter = new ShortTimeFormatter();
     private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
-
-    public string MRL => HttpUtility.UrlPathEncode("file:///" + VideoPath.Replace('\\', '/').Replace("%", "%25"));
-    public string VideoPath { get; set; }
-    public TimeSpan Offset { get; set; }
-    public new float Height { get; set; }
-    public new float Width { get; set; }
-    public LayoutMode Mode { get; set; }
-
-    protected ITimeFormatter TimeFormatter { get; set; }
-
-    public string OffsetString
+    public string MRL => string.IsNullOrEmpty(VideoPath) ? "" : new Uri(Path.GetFullPath(PathCompat.Resolve(VideoPath))).AbsoluteUri;
+    public string VideoPath
     {
-        get => TimeFormatter.Format(Offset);
+        get => videoPath;
+        set { if (SetField(ref videoPath, value)) OnPropertyChanged(nameof(MRL)); }
+    }
+    public TimeSpan Offset
+    {
+        get => offset;
+        set { if (SetField(ref offset, value)) OnPropertyChanged(nameof(OffsetString)); }
+    }
+    public float Height
+    {
+        get => height;
+        set { if (SetField(ref height, value)) OnPropertyChanged(nameof(SizeValue)); }
+    }
+    public float Width
+    {
+        get => width;
+        set { if (SetField(ref width, value)) OnPropertyChanged(nameof(SizeValue)); }
+    }
+    public LayoutMode Mode
+    {
+        get => mode;
         set
         {
-            if (Regex.IsMatch(value, "[^0-9:.,-]"))
+            if (SetField(ref mode, value))
             {
-                return;
-            }
-
-            try
-            {
-                Offset = TimeSpanParser.Parse(value);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex);
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(SizeLabel));
+                OnPropertyChanged(nameof(SizeMaximum));
             }
         }
     }
-
-    public VideoSettings()
+    public float SizeValue { get => Mode == LayoutMode.Horizontal ? Width : Height; set { if (Mode == LayoutMode.Horizontal) Width = value; else Height = value; } }
+    public int SizeMinimum => 100;
+    public int SizeMaximum => Mode == LayoutMode.Horizontal ? 400 : 300;
+    public string SizeLabel => T(Mode == LayoutMode.Horizontal ? "Width:" : "Height:");
+    public string OffsetString
     {
-        InitializeComponent();
-
-        TimeFormatter = new ShortTimeFormatter();
-
-        VideoPath = "";
-        Width = 200;
-        Height = 200;
-        Offset = TimeSpan.Zero;
-
-        txtVideoPath.DataBindings.Add("Text", this, "VideoPath", false, DataSourceUpdateMode.OnPropertyChanged);
-        txtOffset.DataBindings.Add("Text", this, "OffsetString");
+        get => timeFormatter.Format(Offset);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value) || System.Text.RegularExpressions.Regex.IsMatch(value, "[^0-9:.,-]")) return;
+            try { Offset = TimeSpanParser.Parse(value); }
+            catch (Exception ex) { Log.Error(ex); }
+        }
     }
 
     public void SetSettings(XmlNode node)
@@ -92,54 +97,4 @@ public partial class VideoSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "Width", Width);
     }
 
-    private void btnSelectFile_Click(object sender, EventArgs e)
-    {
-        var dialog = new OpenFileDialog()
-        {
-            Filter = T("Video Files|*.avi;*.mpeg;*.mpg;*.mp4;*.mov;*.wmv;*.m4v;*.flv;*.mkv;*.ogg|All Files (*.*)|*.*")
-        };
-        if (File.Exists(VideoPath))
-        {
-            dialog.InitialDirectory = Path.GetDirectoryName(VideoPath);
-            dialog.FileName = Path.GetFileName(VideoPath);
-        }
-
-        DialogResult result = dialog.ShowDialog();
-        if (result == DialogResult.OK)
-        {
-            VideoPath = txtVideoPath.Text = dialog.FileName;
-        }
-    }
-
-    private void txtVideoPath_DragDrop(object sender, DragEventArgs e)
-    {
-        string[] paths = (string[])e.Data.GetData(DataFormats.FileDrop, false);
-        txtVideoPath.Text = paths.FirstOrDefault();
-        VideoPath = paths.FirstOrDefault();
-    }
-
-    private void txtVideoPath_DragEnter(object sender, DragEventArgs e)
-    {
-        e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    private void VideoSettings_Load(object sender, EventArgs e)
-    {
-        if (Mode == LayoutMode.Horizontal)
-        {
-            trkHeightWidth.DataBindings.Clear();
-            trkHeightWidth.Minimum = 100;
-            trkHeightWidth.Maximum = 400;
-            trkHeightWidth.DataBindings.Add("Value", this, "Width", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblHeightWidth.Text = T("Width:");
-        }
-        else
-        {
-            trkHeightWidth.DataBindings.Clear();
-            trkHeightWidth.Minimum = 100;
-            trkHeightWidth.Maximum = 300;
-            trkHeightWidth.DataBindings.Add("Value", this, "Height", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblHeightWidth.Text = T("Height:");
-        }
-    }
 }

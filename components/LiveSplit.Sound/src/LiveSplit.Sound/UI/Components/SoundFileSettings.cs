@@ -1,94 +1,44 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
-public partial class SoundFileSettings : UserControl
+public class SoundFileSettings : SettingsBase
 {
-    public SoundData Data { get; set; }
+    private SoundData data;
+    private bool isClearAddDragDrop = true;
+    public string Label { get; }
+    public SoundData Data
+    {
+        get => data;
+        set
+        {
+            if (ReferenceEquals(data, value)) return;
+            if (data != null) data.PropertyChanged -= DataChanged;
+            SetField(ref data, value);
+            if (data != null) data.PropertyChanged += DataChanged;
+            NotifyPaths();
+        }
+    }
     public IList<string> FilePaths { get => Data.FilePaths; set => Data.FilePaths = value; }
-    private const string PathSeparator = ", ";
-
-    public bool IsClearAddDragDrop { get; set; }
-
+    public string FilePathsText => string.Join(", ", FilePaths);
+    public string PathsTooltip => string.Join("\n", FilePaths);
+    public bool IsClearAddDragDrop { get => isClearAddDragDrop; set => SetField(ref isClearAddDragDrop, value); }
     public SoundFileSettings(EventType eventType, SoundData data)
     {
-        InitializeComponent();
-
+        Label = eventType.GetName();
         Data = data;
-
-        lblName.Text = eventType.GetName();
-        AddPathListBinding(txtFilePath.DataBindings, "Text", this, nameof(FilePaths));
     }
-
-    private void AddPathListBinding(ControlBindingsCollection bindings, string propertyName, object dataSource, string dataMember)
+    private void DataChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        Binding b = new(propertyName, dataSource, dataMember, true, DataSourceUpdateMode.Never);
-        b.Format += new ConvertEventHandler((sender, convertEvent) =>
-        {
-            if (convertEvent.DesiredType != typeof(string))
-            {
-                return;
-            }
-
-            convertEvent.Value = string.Join(PathSeparator, (IList<string>)convertEvent.Value);
-        });
-
-        bindings.Add(b);
+        if (e.PropertyName == nameof(SoundData.FilePaths)) NotifyPaths();
     }
-
-    private void btnBrowse_Click(object sender, EventArgs e)
+    private void NotifyPaths()
     {
-        string path = FilePaths.FirstOrDefault() ?? string.Empty;
-        var fileDialog = new OpenFileDialog()
-        {
-            Multiselect = true,
-            FileName = path,
-            Filter = "Audio Files|*.mp3;*.wav;*.aiff;*.wma|All Files|*.*"
-        };
-
-        DialogResult result = fileDialog.ShowDialog();
-        if (result == DialogResult.OK)
-        {
-            FilePaths = fileDialog.FileNames;
-        }
-
-        txtFilePath.Text = string.Join(PathSeparator, FilePaths);
+        OnPropertyChanged(nameof(FilePaths));
+        OnPropertyChanged(nameof(FilePathsText));
+        OnPropertyChanged(nameof(PathsTooltip));
     }
-
-    private void txtFilePath_DragDrop(object sender, DragEventArgs e)
-    {
-        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop, false);
-        FilePaths = IsClearAddDragDrop ? files : [.. FilePaths.Concat(files).Distinct()];
-
-        txtFilePath.Text = string.Join(PathSeparator, FilePaths);
-    }
-
-    private void txtFilePath_DragEnter(object sender, DragEventArgs e)
-    {
-        e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    private void btnClear_Click(object sender, EventArgs e)
-    {
-        FilePaths = [];
-        txtFilePath.Clear();
-    }
-
-    private void txtFilePath_Enter(object sender, EventArgs e)
-    {
-        var textBox = (TextBox)sender;
-
-        // Display below the text box
-        ttPaths.Show(textBox.Text.Replace(PathSeparator, "\n"), textBox, 0, textBox.Height);
-    }
-
-    private void txtFilePath_Leave(object sender, EventArgs e)
-    {
-        var textBox = (TextBox)sender;
-
-        ttPaths.Hide(textBox);
-    }
+    public void DropFiles(IEnumerable<string> files) => FilePaths = IsClearAddDragDrop ? files.ToArray() : FilePaths.Concat(files).Distinct().ToArray();
+    public void Clear() => FilePaths = [];
 }

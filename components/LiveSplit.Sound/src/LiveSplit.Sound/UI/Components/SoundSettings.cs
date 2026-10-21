@@ -1,87 +1,52 @@
-﻿using NAudio.Wave;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class SoundSettings : UserControl
+public class SoundSettings : SettingsBase
 {
-    public int OutputDevice { get; set; }
-    public int GeneralVolume { get; set; }
-
-    public Dictionary<EventType, SoundData> SoundDataDictionary { get; set; }
-    private Dictionary<EventType, SoundDataSettingsSet> DataSettingsDictionary { get; set; }
-
-    private bool IsClearAddDragDrop { get; set; }
-
+    private int outputDevice;
+    private int generalVolume = 100;
+    private bool isClearAddDragDrop = true;
+    private Dictionary<EventType, SoundData> soundDataDictionary = [];
+    public int OutputDevice { get => outputDevice; set => SetField(ref outputDevice, value); }
+    public int GeneralVolume { get => generalVolume; set => SetField(ref generalVolume, value); }
+    public bool IsOutputDeviceEnabled => false;
+    public Dictionary<EventType, SoundData> SoundDataDictionary
+    {
+        get => soundDataDictionary;
+        set
+        {
+            if (SetField(ref soundDataDictionary, value)) RebuildRows();
+        }
+    }
+    public bool IsClearAddDragDrop
+    {
+        get => isClearAddDragDrop;
+        set
+        {
+            if (SetField(ref isClearAddDragDrop, value))
+                foreach (SoundFileSettings row in FileSettings.Values) row.IsClearAddDragDrop = value;
+        }
+    }
+    public IReadOnlyDictionary<EventType, SoundFileSettings> FileSettings { get; private set; } = new Dictionary<EventType, SoundFileSettings>();
+    public IReadOnlyDictionary<EventType, SoundVolumeSettings> VolumeSettings { get; private set; } = new Dictionary<EventType, SoundVolumeSettings>();
+    private void RebuildRows()
+    {
+        FileSettings = SoundDataDictionary.ToDictionary(pair => pair.Key, pair => new SoundFileSettings(pair.Key, pair.Value) { IsClearAddDragDrop = IsClearAddDragDrop });
+        VolumeSettings = SoundDataDictionary.ToDictionary(pair => pair.Key, pair => new SoundVolumeSettings(pair.Key, pair.Value));
+        OnPropertyChanged(nameof(FileSettings));
+        OnPropertyChanged(nameof(VolumeSettings));
+    }
     public SoundSettings()
     {
-        InitializeComponent();
-
-        OutputDevice = 0;
-        GeneralVolume = 100;
-
-        SoundDataDictionary = [];
-        DataSettingsDictionary = [];
-
-        IsClearAddDragDrop = true;
-
-        foreach (EventType type in Enum.GetValues(typeof(EventType)))
+        foreach (EventType type in Enum.GetValues<EventType>())
         {
-            SoundData data = new([], 100);
-            SoundDataDictionary.Add(type, data);
-
-            SoundFileSettings sfs = new(type, data)
-            {
-                IsClearAddDragDrop = IsClearAddDragDrop,
-            };
-            SoundVolumeSettings svs = new(type, data);
-
-            SoundDataSettingsSet settingsSet = new(sfs, svs);
-            DataSettingsDictionary.Add(type, settingsSet);
+            SoundDataDictionary.Add(type, new SoundData([], 100));
         }
-
-        int index = 0;
-        foreach (EventType type in Enum.GetValues(typeof(EventType)))
-        {
-            AddControl(tableLayoutPanel1, DataSettingsDictionary[type].FileSettings, index + 1, 3);
-            AddControl(tableLayoutPanel2, DataSettingsDictionary[type].VolumeSettings, index + 2, 2);
-
-            index++;
-        }
-
-        for (int i = 0; i < WaveOut.DeviceCount; ++i)
-        {
-            cbOutputDevice.Items.Add(WaveOut.GetCapabilities(i));
-        }
-
-        cbOutputDevice.DataBindings.Add("SelectedIndex", this, nameof(OutputDevice));
-        tbGeneralVolume.DataBindings.Add("Value", this, nameof(GeneralVolume));
-    }
-
-    private void AddControl(TableLayoutPanel tableLayoutPanel, UserControl soundDataControl, int rowIndex, int columnSpan)
-    {
-        tableLayoutPanel.Controls.Add(soundDataControl, 0, rowIndex);
-        tableLayoutPanel.SetColumnSpan(soundDataControl, columnSpan);
-    }
-
-    private void SoundSettings_Load(object sender, EventArgs e)
-    {
-        rdoClearAddDragDrop.Checked = IsClearAddDragDrop;
-        rdoAppendDragDrop.Checked = !IsClearAddDragDrop;
-    }
-
-    private void rdoAddDragDrop_CheckedChanged(object sender, EventArgs e)
-    {
-        IsClearAddDragDrop = rdoClearAddDragDrop.Checked;
-
-        foreach (EventType type in Enum.GetValues(typeof(EventType)))
-        {
-            DataSettingsDictionary[type].FileSettings.IsClearAddDragDrop = IsClearAddDragDrop;
-        }
+        RebuildRows();
     }
 
     public void SetSettings(XmlNode node)
@@ -174,22 +139,4 @@ public partial class SoundSettings : UserControl
         return paths.Aggregate(0, (hash, next) => hash ^ next.GetHashCode());
     }
 
-    private void VolumeTrackBarScrollHandler(object sender, EventArgs e)
-    {
-        var trackBar = (TrackBar)sender;
-
-        ttVolume.SetToolTip(trackBar, trackBar.Value.ToString());
-    }
-}
-
-internal class SoundDataSettingsSet
-{
-    internal SoundFileSettings FileSettings { get; set; }
-    internal SoundVolumeSettings VolumeSettings { get; set; }
-
-    internal SoundDataSettingsSet(SoundFileSettings sfs, SoundVolumeSettings svs)
-    {
-        FileSettings = sfs;
-        VolumeSettings = svs;
-    }
 }

@@ -1,11 +1,9 @@
 ﻿using LiveSplit.Model;
 using LiveSplit.Options;
-using NAudio.Wave;
+using LiveSplit.Hosting;
 using System;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
@@ -14,20 +12,27 @@ public class SoundComponent : LogicComponent, IDeactivatableComponent
 {
     public override string ComponentName => "Sound Effects";
 
-    public bool Activated { get; set; }
+    private bool activated = true;
+    public bool Activated
+    {
+        get => activated;
+        set { activated = value; if (!value) Player?.Stop(); }
+    }
 
     private LiveSplitState State { get; set; }
     private SoundSettings Settings { get; set; }
-    private WaveOut Player { get; set; }
+    private IAudioPlayer Player { get; set; }
     private Random Rnd { get; set; }
 
-    public SoundComponent(LiveSplitState state)
+    public SoundComponent(LiveSplitState state) : this(state, new LinuxAudioPlayer()) { }
+
+    public SoundComponent(LiveSplitState state, IAudioPlayer player)
     {
         Activated = true;
 
         State = state;
         Settings = new SoundSettings();
-        Player = new WaveOut();
+        Player = player;
 
         State.OnStart += State_OnStart;
         State.OnSplit += State_OnSplit;
@@ -50,12 +55,12 @@ public class SoundComponent : LogicComponent, IDeactivatableComponent
         State.OnResume -= State_OnResume;
         State.OnReset -= State_OnReset;
 
-        Player.Stop();
+        Player.Dispose();
     }
 
     public override void Update(IInvalidator invalidator, LiveSplitState state, float width, float height, LayoutMode mode) { }
 
-    public override Control GetSettingsControl(LayoutMode mode)
+    public override object GetSettingsControl(LayoutMode mode)
     {
         return Settings;
     }
@@ -175,7 +180,7 @@ public class SoundComponent : LogicComponent, IDeactivatableComponent
             return;
         }
 
-        string[] existingPaths = [.. Settings.SoundDataDictionary[type].FilePaths.Where(File.Exists)];
+        string[] existingPaths = [.. Settings.SoundDataDictionary[type].FilePaths.Select(path => PathCompat.Resolve(path)).Where(File.Exists)];
         if (existingPaths.Length == 0)
         {
             return;
@@ -186,24 +191,14 @@ public class SoundComponent : LogicComponent, IDeactivatableComponent
 
         int volume = Settings.SoundDataDictionary[type].Volume;
 
-        Task.Factory.StartNew(() =>
+        try
         {
-            try
-            {
-                var audioFileReader = new AudioFileReader(path)
-                {
-                    Volume = volume / 100f * (Settings.GeneralVolume / 100f)
-                };
-
-                Player.DeviceNumber = Settings.OutputDevice;
-                Player.Init(audioFileReader);
-                Player.Play();
-            }
-            catch (Exception e)
-            {
-                Log.Error(e);
-            }
-        });
+            Player.Play(path, volume / 100f * (Settings.GeneralVolume / 100f));
+        }
+        catch (Exception e)
+        {
+            Log.Error(e);
+        }
     }
 
     public int GetSettingsHashCode()
