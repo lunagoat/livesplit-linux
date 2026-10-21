@@ -4,150 +4,458 @@ using LiveSplit.Model.Comparisons;
 using LiveSplit.TimeFormatters;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class SplitsSettings : UserControl
+public class SplitsSettings : SettingsBase
 {
     private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
 
-    private int _VisualSplitCount { get; set; }
+    /// <summary>Items of the background gradient drop down (<see cref="GradientString"/>), in enum order.</summary>
+    public static readonly string[] GradientOptions = [.. Enum.GetValues<ExtendedGradientType>().Select(x => x.ToString())];
+    /// <summary>Items of the current split background gradient drop down (<see cref="SplitGradientString"/>): Plain, Vertical, Horizontal.</summary>
+    public static readonly string[] SplitGradientOptions = ["Plain", "Vertical", "Horizontal"];
+
+    private int visualSplitCount;
+    private Color currentSplitTopColor;
+    private Color currentSplitBottomColor;
+    private int splitPreviewCount;
+    private float splitWidth;
+    private float splitHeight;
+    private float iconSize;
+    private bool display2Rows;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private ExtendedGradientType backgroundGradient;
+    private bool displayIcons;
+    private bool iconShadows;
+    private bool showThinSeparators;
+    private bool alwaysShowLastSplit;
+    private bool lockLastSplit;
+    private bool separatorLastSplit;
+    private bool dropDecimals;
+    private TimeAccuracy deltasAccuracy;
+    private bool overrideDeltasColor;
+    private Color deltasColor;
+    private bool showColumnLabels;
+    private Color labelsColor;
+    private bool automaticAbbreviations;
+    private Color beforeNamesColor;
+    private Color currentNamesColor;
+    private Color afterNamesColor;
+    private bool overrideTextColor;
+    private Color beforeTimesColor;
+    private Color currentTimesColor;
+    private Color afterTimesColor;
+    private bool overrideTimesColor;
+    private TimeAccuracy splitTimesAccuracy;
+    private GradientType currentSplitGradient;
+    private LayoutMode mode;
+    private bool loading;
+    private readonly HashSet<ColumnSettings> attachedColumns = [];
+
+    /// <summary>"Total Splits": number of rows of the component (1..1000).</summary>
     public int VisualSplitCount
     {
-        get => _VisualSplitCount;
+        get => visualSplitCount;
         set
         {
-            _VisualSplitCount = value;
-            int max = Math.Max(0, _VisualSplitCount - (AlwaysShowLastSplit ? 2 : 1));
-            if (dmnUpcomingSegments.Value > max)
+            if (SetField(ref visualSplitCount, value))
             {
-                dmnUpcomingSegments.Value = max;
+                OnPropertyChanged(nameof(UpcomingSplitsMaximum));
             }
 
-            dmnUpcomingSegments.Maximum = max;
+            // Same as the old code: re-assigning the count (also done when AlwaysShowLastSplit changes) clamps the preview count.
+            if (SplitPreviewCount > UpcomingSplitsMaximum)
+            {
+                SplitPreviewCount = UpcomingSplitsMaximum;
+            }
         }
     }
-    public static ISegment HilightSplit { get; set; }
-    public static ISegment SectionSplit { get; set; }
 
-    public bool AutomaticAbbreviation { get; set; }
-    public Color CurrentSplitTopColor { get; set; }
-    public Color CurrentSplitBottomColor { get; set; }
-    public int SplitPreviewCount { get; set; }
-    public int MinimumMajorSplits { get; set; }
-    public float SplitWidth { get; set; }
-    public float SplitHeight { get; set; }
+    public Color CurrentSplitTopColor
+    {
+        get => currentSplitTopColor;
+        set
+        {
+            if (SetField(ref currentSplitTopColor, value))
+            {
+                OnPropertyChanged(nameof(CurrentSplitBottomSwatchColor));
+            }
+        }
+    }
+
+    public Color CurrentSplitBottomColor
+    {
+        get => currentSplitBottomColor;
+        set
+        {
+            if (SetField(ref currentSplitBottomColor, value))
+            {
+                OnPropertyChanged(nameof(CurrentSplitBottomSwatchColor));
+            }
+        }
+    }
+
+    /// <summary>"Upcoming Splits": how many splits after the current one are kept visible.</summary>
+    public int SplitPreviewCount { get => splitPreviewCount; set => SetField(ref splitPreviewCount, value); }
+
+    public float SplitWidth
+    {
+        get => splitWidth;
+        set
+        {
+            if (SetField(ref splitWidth, value))
+            {
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
+    public float SplitHeight
+    {
+        get => splitHeight;
+        set
+        {
+            if (SetField(ref splitHeight, value))
+            {
+                OnPropertyChanged(nameof(ScaledSplitHeight));
+                OnPropertyChanged(nameof(SizeValue));
+            }
+        }
+    }
+
     public float ScaledSplitHeight { get => SplitHeight * 10f; set => SplitHeight = value / 10f; }
-    public float IconSize { get; set; }
 
-    public bool Display2Rows { get; set; }
+    public float IconSize { get => iconSize; set => SetField(ref iconSize, value); }
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
+    public bool Display2Rows
+    {
+        get => display2Rows;
+        set
+        {
+            if (SetField(ref display2Rows, value))
+            {
+                OnPropertyChanged(nameof(Display2RowsShown));
+            }
+        }
+    }
 
-    public ExtendedGradientType BackgroundGradient { get; set; }
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public ExtendedGradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (ExtendedGradientType)Enum.Parse(typeof(ExtendedGradientType), value);
     }
 
-    public string HeaderComparison { get; set; }
-    public string HeaderTimingMethod { get; set; }
-    public LiveSplitState CurrentState { get; set; }
+    /// <summary>The first background swatch is hidden when the gradient is Plain; the second swatch is always visible.</summary>
+    public bool IsColor1Visible => BackgroundGradient != ExtendedGradientType.Plain;
 
-    public bool DisplayIcons { get; set; }
-    public bool IconShadows { get; set; }
-    public bool IndentBlankIcons { get; set; }
-    public bool ShowThinSeparators { get; set; }
-    public bool AlwaysShowLastSplit { get; set; }
-    public bool LockLastSplit { get; set; }
-    public bool SeparatorLastSplit { get; set; }
-
-    public bool IndentSubsplits { get; set; }
-    public bool HideSubsplits { get; set; }
-    public bool ShowSubsplits { get; set; }
-    public bool CurrentSectionOnly { get; set; }
-    public bool OverrideSubsplitColor { get; set; }
-    public Color SubsplitTopColor { get; set; }
-    public Color SubsplitBottomColor { get; set; }
-    public GradientType SubsplitGradient { get; set; }
-    public string SubsplitGradientString
+    /// <summary>Second background swatch: edits <see cref="BackgroundColor2"/>, or <see cref="BackgroundColor"/> when the gradient is Plain.</summary>
+    public Color BackgroundSwatch2Color
     {
-        get => SubsplitGradient.ToString();
-        set => SubsplitGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
     }
 
-    public bool ShowHeader { get; set; }
-    public bool IndentSectionSplit { get; set; }
-    public bool ShowIconSectionSplit { get; set; }
-    public bool ShowSectionIcon { get; set; }
-    public Color HeaderTopColor { get; set; }
-    public Color HeaderBottomColor { get; set; }
-    public GradientType HeaderGradient { get; set; }
-    public string HeaderGradientString
+    private LiveSplitState currentState;
+    public LiveSplitState CurrentState
     {
-        get => HeaderGradient.ToString();
-        set => HeaderGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
+        get => currentState;
+        set
+        {
+            if (SetField(ref currentState, value))
+            {
+                OnPropertyChanged(nameof(HeaderComparisonOptions));
+            }
+        }
     }
-    public bool OverrideHeaderColor { get; set; }
-    public Color HeaderTextColor { get; set; }
-    public bool HeaderText { get; set; }
-    public Color HeaderTimesColor { get; set; }
-    public bool HeaderTimes { get; set; }
-    public TimeAccuracy HeaderAccuracy { get; set; }
-    public bool SectionTimer { get; set; }
-    public Color SectionTimerColor { get; set; }
-    public bool SectionTimerGradient { get; set; }
-    public TimeAccuracy SectionTimerAccuracy { get; set; }
 
-    public bool DropDecimals { get; set; }
-    public TimeAccuracy DeltasAccuracy { get; set; }
+    public bool DisplayIcons
+    {
+        get => displayIcons;
+        set
+        {
+            if (SetField(ref displayIcons, value))
+            {
+                OnPropertyChanged(nameof(IsIconOptionsEnabled));
+            }
+        }
+    }
 
-    public bool OverrideDeltasColor { get; set; }
-    public Color DeltasColor { get; set; }
+    public bool IconShadows { get => iconShadows; set => SetField(ref iconShadows, value); }
 
-    public bool ShowColumnLabels { get; set; }
-    public Color LabelsColor { get; set; }
+    public bool ShowThinSeparators
+    {
+        get => showThinSeparators;
+        set
+        {
+            if (SetField(ref showThinSeparators, value))
+            {
+                RaiseSplitLayoutChanged();
+            }
+        }
+    }
 
-    public Color BeforeNamesColor { get; set; }
-    public Color CurrentNamesColor { get; set; }
-    public Color AfterNamesColor { get; set; }
-    public bool OverrideTextColor { get; set; }
-    public Color BeforeTimesColor { get; set; }
-    public Color CurrentTimesColor { get; set; }
-    public Color AfterTimesColor { get; set; }
-    public bool OverrideTimesColor { get; set; }
+    public bool AlwaysShowLastSplit
+    {
+        get => alwaysShowLastSplit;
+        set
+        {
+            if (SetField(ref alwaysShowLastSplit, value))
+            {
+                OnPropertyChanged(nameof(UpcomingSplitsMaximum));
+                if (!loading)
+                {
+                    VisualSplitCount = VisualSplitCount;
+                }
 
-    public TimeAccuracy SplitTimesAccuracy { get; set; }
-    public GradientType CurrentSplitGradient { get; set; }
+                RaiseSplitLayoutChanged();
+            }
+        }
+    }
+
+    public bool LockLastSplit
+    {
+        get => lockLastSplit;
+        set
+        {
+            if (SetField(ref lockLastSplit, value))
+            {
+                RaiseSplitLayoutChanged();
+            }
+        }
+    }
+
+    public bool SeparatorLastSplit
+    {
+        get => separatorLastSplit;
+        set
+        {
+            if (SetField(ref separatorLastSplit, value))
+            {
+                RaiseSplitLayoutChanged();
+            }
+        }
+    }
+
+    public bool DropDecimals { get => dropDecimals; set => SetField(ref dropDecimals, value); }
+
+    public TimeAccuracy DeltasAccuracy
+    {
+        get => deltasAccuracy;
+        set
+        {
+            if (SetField(ref deltasAccuracy, value))
+            {
+                OnPropertyChanged(nameof(IsDeltaSeconds));
+                OnPropertyChanged(nameof(IsDeltaTenths));
+                OnPropertyChanged(nameof(IsDeltaHundredths));
+                OnPropertyChanged(nameof(IsDeltaMilliseconds));
+            }
+        }
+    }
+
+    public bool OverrideDeltasColor
+    {
+        get => overrideDeltasColor;
+        set
+        {
+            if (SetField(ref overrideDeltasColor, value))
+            {
+                OnPropertyChanged(nameof(IsDeltaColorEnabled));
+            }
+        }
+    }
+
+    public Color DeltasColor { get => deltasColor; set => SetField(ref deltasColor, value); }
+
+    public bool ShowColumnLabels
+    {
+        get => showColumnLabels;
+        set
+        {
+            if (SetField(ref showColumnLabels, value))
+            {
+                OnPropertyChanged(nameof(ShowColumnLabelsShown));
+                OnPropertyChanged(nameof(IsLabelsColorEnabled));
+            }
+        }
+    }
+
+    public Color LabelsColor { get => labelsColor; set => SetField(ref labelsColor, value); }
+
+    public bool AutomaticAbbreviation { get => automaticAbbreviations; set => SetField(ref automaticAbbreviations, value); }
+    public Color BeforeNamesColor { get => beforeNamesColor; set => SetField(ref beforeNamesColor, value); }
+    public Color CurrentNamesColor { get => currentNamesColor; set => SetField(ref currentNamesColor, value); }
+    public Color AfterNamesColor { get => afterNamesColor; set => SetField(ref afterNamesColor, value); }
+
+    public bool OverrideTextColor
+    {
+        get => overrideTextColor;
+        set
+        {
+            if (SetField(ref overrideTextColor, value))
+            {
+                OnPropertyChanged(nameof(IsNamesColorEnabled));
+            }
+        }
+    }
+
+    public Color BeforeTimesColor { get => beforeTimesColor; set => SetField(ref beforeTimesColor, value); }
+    public Color CurrentTimesColor { get => currentTimesColor; set => SetField(ref currentTimesColor, value); }
+    public Color AfterTimesColor { get => afterTimesColor; set => SetField(ref afterTimesColor, value); }
+
+    public bool OverrideTimesColor
+    {
+        get => overrideTimesColor;
+        set
+        {
+            if (SetField(ref overrideTimesColor, value))
+            {
+                OnPropertyChanged(nameof(IsTimesColorEnabled));
+            }
+        }
+    }
+
+    public TimeAccuracy SplitTimesAccuracy
+    {
+        get => splitTimesAccuracy;
+        set
+        {
+            if (SetField(ref splitTimesAccuracy, value))
+            {
+                OnPropertyChanged(nameof(IsSplitTimesSeconds));
+                OnPropertyChanged(nameof(IsSplitTimesTenths));
+                OnPropertyChanged(nameof(IsSplitTimesHundredths));
+                OnPropertyChanged(nameof(IsSplitTimesMilliseconds));
+            }
+        }
+    }
+
+    public GradientType CurrentSplitGradient
+    {
+        get => currentSplitGradient;
+        set
+        {
+            if (SetField(ref currentSplitGradient, value))
+            {
+                OnPropertyChanged(nameof(SplitGradientString));
+                OnPropertyChanged(nameof(IsTopColorVisible));
+                OnPropertyChanged(nameof(CurrentSplitBottomSwatchColor));
+            }
+        }
+    }
+
     public string SplitGradientString
     {
         get => CurrentSplitGradient.ToString();
         set => CurrentSplitGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
+    /// <summary>The top colour swatch of the current split background is hidden when the gradient is Plain.</summary>
+    public bool IsTopColorVisible => CurrentSplitGradient != GradientType.Plain;
+
+    /// <summary>Bottom swatch of the current split background: edits <see cref="CurrentSplitBottomColor"/>, or <see cref="CurrentSplitTopColor"/> when the gradient is Plain.</summary>
+    public Color CurrentSplitBottomSwatchColor
+    {
+        get => IsTopColorVisible ? CurrentSplitBottomColor : CurrentSplitTopColor;
+        set
+        {
+            if (IsTopColorVisible)
+            {
+                CurrentSplitBottomColor = value;
+            }
+            else
+            {
+                CurrentSplitTopColor = value;
+            }
+        }
+    }
+
+    /// <summary>Raised when a setting changes that requires the component to rebuild its rows (not raised while loading settings).</summary>
     public event EventHandler SplitLayoutChanged;
 
-    public LayoutMode Mode { get; set; }
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(SizeLabel));
+                OnPropertyChanged(nameof(SizeMinimum));
+                OnPropertyChanged(nameof(SizeMaximum));
+                OnPropertyChanged(nameof(SizeValue));
+                OnPropertyChanged(nameof(IsDisplay2RowsEnabled));
+                OnPropertyChanged(nameof(Display2RowsShown));
+                OnPropertyChanged(nameof(IsColumnLabelsEnabled));
+                OnPropertyChanged(nameof(ShowColumnLabelsShown));
+                OnPropertyChanged(nameof(IsLabelsColorEnabled));
+            }
+        }
+    }
 
-    public IList<ColumnSettings> ColumnsList { get; set; }
-    public Size StartingSize { get; set; }
-    public Size StartingTableLayoutSize { get; set; }
-    private readonly int startingColumnSettingHeight;
+    /// <summary>The columns, in display order. Each entry is the model of one "Column: ..." group.</summary>
+    public ObservableCollection<ColumnSettings> ColumnsList { get; }
 
     public SplitsSettings(LiveSplitState state)
     {
-        InitializeComponent();
-
         CurrentState = state;
-
-        StartingSize = Size;
-        StartingTableLayoutSize = tableColumns.Size;
+        ColumnsList = [];
+        ColumnsList.CollectionChanged += ColumnsList_CollectionChanged;
 
         AutomaticAbbreviation = false;
         VisualSplitCount = 8;
@@ -175,7 +483,6 @@ public partial class SplitsSettings : UserControl
         AfterTimesColor = Color.FromArgb(255, 255, 255);
         OverrideTimesColor = false;
         CurrentSplitGradient = GradientType.Vertical;
-        cmbSplitGradient.SelectedIndexChanged += cmbSplitGradient_SelectedIndexChanged;
         BackgroundColor = Color.Transparent;
         BackgroundColor2 = Color.FromArgb(1, 255, 255, 255);
         BackgroundGradient = ExtendedGradientType.Alternating;
@@ -216,307 +523,617 @@ public partial class SplitsSettings : UserControl
         SectionTimerGradient = true;
         SectionTimerAccuracy = TimeAccuracy.Tenths;
 
-        chkAutomaticAbbreviation.DataBindings.Add("Checked", this, "AutomaticAbbreviation", false, DataSourceUpdateMode.OnPropertyChanged);
-        dmnTotalSegments.DataBindings.Add("Value", this, "VisualSplitCount", false, DataSourceUpdateMode.OnPropertyChanged);
-        dmnUpcomingSegments.DataBindings.Add("Value", this, "SplitPreviewCount", false, DataSourceUpdateMode.OnPropertyChanged);
-        dmnMinimumMajorSplits.DataBindings.Add("Value", this, "MinimumMajorSplits", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTopColor.DataBindings.Add("BackColor", this, "CurrentSplitTopColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnBottomColor.DataBindings.Add("BackColor", this, "CurrentSplitBottomColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnBeforeNamesColor.DataBindings.Add("BackColor", this, "BeforeNamesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnCurrentNamesColor.DataBindings.Add("BackColor", this, "CurrentNamesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnAfterNamesColor.DataBindings.Add("BackColor", this, "AfterNamesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnBeforeTimesColor.DataBindings.Add("BackColor", this, "BeforeTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnCurrentTimesColor.DataBindings.Add("BackColor", this, "CurrentTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnAfterTimesColor.DataBindings.Add("BackColor", this, "AfterTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkDisplayIcons.DataBindings.Add("Checked", this, "DisplayIcons", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkIconShadows.DataBindings.Add("Checked", this, "IconShadows", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkIndentBlankIcons.DataBindings.Add("Checked", this, "IndentBlankIcons", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkThinSeparators.DataBindings.Add("Checked", this, "ShowThinSeparators", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkLastSplit.DataBindings.Add("Checked", this, "AlwaysShowLastSplit", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTextColor.DataBindings.Add("Checked", this, "OverrideTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTimesColor.DataBindings.Add("Checked", this, "OverrideTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkLockLastSplit.DataBindings.Add("Checked", this, "LockLastSplit", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSeparatorLastSplit.DataBindings.Add("Checked", this, "SeparatorLastSplit", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkDropDecimals.DataBindings.Add("Checked", this, "DropDecimals", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideDeltaColor.DataBindings.Add("Checked", this, "OverrideDeltasColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnDeltaColor.DataBindings.Add("BackColor", this, "DeltasColor", false, DataSourceUpdateMode.OnPropertyChanged);
 
-        chkIndentSubsplits.DataBindings.Add("Checked", this, "IndentSubsplits", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkCurrentSectionOnly.DataBindings.Add("Checked", this, "CurrentSectionOnly", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideSubsplitColor.DataBindings.Add("Checked", this, "OverrideSubsplitColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbSubsplitGradient.DataBindings.Add("SelectedItem", this, "SubsplitGradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSubsplitTopColor.DataBindings.Add("BackColor", this, "SubsplitTopColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSubsplitBottomColor.DataBindings.Add("BackColor", this, "SubsplitBottomColor", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        chkShowHeader.DataBindings.Add("Checked", this, "ShowHeader", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkIndentSectionSplit.DataBindings.Add("Checked", this, "IndentSectionSplit", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkShowIconSectionSplit.DataBindings.Add("Checked", this, "ShowIconSectionSplit", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkShowSectionIcon.DataBindings.Add("Checked", this, "ShowSectionIcon", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnHeaderTopColor.DataBindings.Add("BackColor", this, "HeaderTopColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnHeaderBottomColor.DataBindings.Add("BackColor", this, "HeaderBottomColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbHeaderGradient.DataBindings.Add("SelectedItem", this, "HeaderGradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideHeaderColor.DataBindings.Add("Checked", this, "OverrideHeaderColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnHeaderTextColor.DataBindings.Add("BackColor", this, "HeaderTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkHeaderText.DataBindings.Add("Checked", this, "HeaderText", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnHeaderTimesColor.DataBindings.Add("BackColor", this, "HeaderTimesColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkHeaderTimes.DataBindings.Add("Checked", this, "HeaderTimes", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSectionTimer.DataBindings.Add("Checked", this, "SectionTimer", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnSectionTimerColor.DataBindings.Add("BackColor", this, "SectionTimerColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSectionTimerGradient.DataBindings.Add("Checked", this, "SectionTimerGradient", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        trkIconSize.DataBindings.Add("Value", this, "IconSize", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbSplitGradient.DataBindings.Add("SelectedItem", this, "SplitGradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbHeaderComparison.DataBindings.Add("SelectedItem", this, "HeaderComparison", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbHeaderTimingMethod.DataBindings.Add("SelectedItem", this, "HeaderTimingMethod", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        btnLabelColor.DataBindings.Add("BackColor", this, "LabelsColor", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        ColumnsList = [];
         ColumnsList.Add(new ColumnSettings(CurrentState, "+/-", ColumnsList) { Data = new ColumnData("+/-", ColumnType.Delta, "Current Comparison", "Current Timing Method") });
-        ColumnsList.Add(new ColumnSettings(CurrentState, "Time", ColumnsList) { Data = new ColumnData("Time", ColumnType.SplitTime, "Current Comparison", "Current Timing Method") });
-
-        startingColumnSettingHeight = ColumnsList[0].Height;
+        ColumnsList.Add(new ColumnSettings(CurrentState, T("Time"), ColumnsList) { Data = new ColumnData(T("Time"), ColumnType.SplitTime, "Current Comparison", "Current Timing Method") });
     }
 
-    private void chkColumnLabels_CheckedChanged(object sender, EventArgs e)
-    {
-        btnLabelColor.Enabled = lblLabelsColor.Enabled = chkColumnLabels.Checked;
-    }
+    // ---- view state (what the old Load/CheckedChanged handlers derived from the controls) ----
 
-    private void chkDisplayIcons_CheckedChanged(object sender, EventArgs e)
-    {
-        trkIconSize.Enabled = label5.Enabled = chkIconShadows.Enabled = chkDisplayIcons.Checked;
-    }
+    /// <summary>Maximum of the "Upcoming Splits" box: the total minus the current split and (when shown) the pinned last split.</summary>
+    public int UpcomingSplitsMaximum => Math.Max(0, VisualSplitCount - (AlwaysShowLastSplit ? 2 : 1));
 
-    private void chkIndentBlankIcons_CheckedChanged(object sender, EventArgs e)
-    {
-        SplitLayoutChanged(this, null);
-    }
+    /// <summary>Enabled state of the "Size" row and "Show Icon Shadows" of the Icons group.</summary>
+    public bool IsIconOptionsEnabled => DisplayIcons;
 
-    private void chkOverrideTimesColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label6.Enabled = label9.Enabled = label7.Enabled = btnBeforeTimesColor.Enabled
-            = btnCurrentTimesColor.Enabled = btnAfterTimesColor.Enabled = chkOverrideTimesColor.Checked;
-    }
+    public bool IsNamesColorEnabled => OverrideTextColor;
+    public bool IsTimesColorEnabled => OverrideTimesColor;
+    public bool IsDeltaColorEnabled => OverrideDeltasColor;
 
-    private void chkOverrideDeltaColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label8.Enabled = btnDeltaColor.Enabled = chkOverrideDeltaColor.Checked;
-    }
+    /// <summary>"Split Width:" in horizontal layouts, "Split Height:" in vertical layouts (translated).</summary>
+    public string SizeLabel => Mode == LayoutMode.Horizontal ? T("Split Width:") : T("Split Height:");
+    public float SizeMinimum => Mode == LayoutMode.Horizontal ? 5 : 0;
+    public float SizeMaximum => Mode == LayoutMode.Horizontal ? 120 : 250;
 
-    private void chkOverrideTextColor_CheckedChanged(object sender, EventArgs e)
+    /// <summary>Maps to <see cref="SplitWidth"/> in horizontal layouts and <see cref="ScaledSplitHeight"/> (tenths) in vertical layouts.</summary>
+    public float SizeValue
     {
-        label3.Enabled = label10.Enabled = label13.Enabled = btnBeforeNamesColor.Enabled
-        = btnCurrentNamesColor.Enabled = btnAfterNamesColor.Enabled = chkOverrideTextColor.Checked;
-    }
-
-    private void rdoDeltaHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateDeltaAccuracy();
-    }
-
-    private void rdoDeltaTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateDeltaAccuracy();
-    }
-
-    private void rdoDeltaSeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateDeltaAccuracy();
-    }
-
-    private void chkSeparatorLastSplit_CheckedChanged(object sender, EventArgs e)
-    {
-        SeparatorLastSplit = chkSeparatorLastSplit.Checked;
-        SplitLayoutChanged(this, null);
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnColor1.Visible = cmbGradientType.SelectedItem.ToString() != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
-    }
-
-    private void cmbSplitGradient_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnTopColor.Visible = cmbSplitGradient.SelectedItem.ToString() != "Plain";
-        btnBottomColor.DataBindings.Clear();
-        btnBottomColor.DataBindings.Add("BackColor", this, btnTopColor.Visible ? "CurrentSplitBottomColor" : "CurrentSplitTopCOlor", false, DataSourceUpdateMode.OnPropertyChanged);
-        SplitGradientString = cmbSplitGradient.SelectedItem.ToString();
-    }
-
-    private void chkLockLastSplit_CheckedChanged(object sender, EventArgs e)
-    {
-        LockLastSplit = chkLockLastSplit.Checked;
-        SplitLayoutChanged(this, null);
-    }
-
-    private void rdoHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void rdoTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void rdoSeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void UpdateSubsplitVisibility()
-    {
-        if (rdoShowSubsplits.Checked)
+        get => Mode == LayoutMode.Horizontal ? SplitWidth : ScaledSplitHeight;
+        set
         {
-            ShowSubsplits = true;
-            HideSubsplits = false;
-            CurrentSectionOnly = false;
-            chkCurrentSectionOnly.Enabled = false;
-            chkIndentSubsplits.Enabled = true;
-            chkIndentSectionSplit.Enabled = false;
-            lblMinimumMajorSplits.Enabled = false;
-            dmnMinimumMajorSplits.Enabled = false;
-        }
-        else if (rdoHideSubsplits.Checked)
-        {
-            ShowSubsplits = false;
-            HideSubsplits = true;
-            CurrentSectionOnly = chkCurrentSectionOnly.Checked;
-            chkCurrentSectionOnly.Enabled = true;
-            chkIndentSubsplits.Enabled = false;
-            chkIndentSectionSplit.Enabled = false;
-            lblMinimumMajorSplits.Enabled = false;
-            dmnMinimumMajorSplits.Enabled = false;
-        }
-        else
-        {
-            ShowSubsplits = false;
-            HideSubsplits = false;
-            CurrentSectionOnly = chkCurrentSectionOnly.Checked;
-            chkCurrentSectionOnly.Enabled = true;
-            chkIndentSubsplits.Enabled = true;
-            chkIndentSectionSplit.Enabled = chkIndentSubsplits.Checked;
-            lblMinimumMajorSplits.Enabled = true;
-            dmnMinimumMajorSplits.Enabled = true;
+            if (Mode == LayoutMode.Horizontal)
+            {
+                SplitWidth = value;
+            }
+            else
+            {
+                ScaledSplitHeight = value;
+            }
         }
     }
 
-    private void UpdateAccuracy()
+    /// <summary>"Display 2 Rows" is forced on (and disabled) in horizontal layouts.</summary>
+    public bool IsDisplay2RowsEnabled => Mode != LayoutMode.Horizontal;
+
+    /// <summary>What the "Display 2 Rows" box shows: always checked in horizontal layouts, <see cref="Display2Rows"/> otherwise. Setting it in horizontal layouts is ignored.</summary>
+    public bool Display2RowsShown
     {
-        SplitTimesAccuracy =
-            rdoSeconds.Checked ? TimeAccuracy.Seconds
-            : rdoTenths.Checked ? TimeAccuracy.Tenths
-            : rdoHundredths.Checked ? TimeAccuracy.Hundredths
-            : TimeAccuracy.Milliseconds;
-    }
-
-    private void UpdateDeltaAccuracy()
-    {
-        DeltasAccuracy =
-            rdoDeltaSeconds.Checked ? TimeAccuracy.Seconds
-            : rdoDeltaTenths.Checked ? TimeAccuracy.Tenths
-            : rdoDeltaHundredths.Checked ? TimeAccuracy.Hundredths
-            : TimeAccuracy.Milliseconds;
-    }
-
-    private void chkLastSplit_CheckedChanged(object sender, EventArgs e)
-    {
-        AlwaysShowLastSplit = chkLastSplit.Checked;
-        VisualSplitCount = VisualSplitCount;
-        SplitLayoutChanged(this, null);
-    }
-
-    private void chkThinSeparators_CheckedChanged(object sender, EventArgs e)
-    {
-        ShowThinSeparators = chkThinSeparators.Checked;
-        SplitLayoutChanged(this, null);
-    }
-
-    private void SplitsSettings_Load(object sender, EventArgs e)
-    {
-        ResetColumns();
-
-        chkOverrideDeltaColor_CheckedChanged(null, null);
-        chkOverrideTextColor_CheckedChanged(null, null);
-        chkOverrideTimesColor_CheckedChanged(null, null);
-        chkOverrideSubsplitColor_CheckedChanged(null, null);
-        chkShowHeader_CheckedChanged(null, null);
-        chkOverrideHeaderColor_CheckedChanged(null, null);
-        chkSectionTimer_CheckedChanged(null, null);
-        chkDisplayIcons_CheckedChanged(null, null);
-        chkColumnLabels_CheckedChanged(null, null);
-
-        cmbHeaderComparison.Items.Clear();
-        cmbHeaderComparison.Items.Add("Current Comparison");
-        cmbHeaderComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x != NoneComparisonGenerator.ComparisonName).ToArray());
-        if (!cmbHeaderComparison.Items.Contains(HeaderComparison))
+        get => Mode == LayoutMode.Horizontal || Display2Rows;
+        set
         {
-            cmbHeaderComparison.Items.Add(HeaderComparison);
+            if (Mode != LayoutMode.Horizontal)
+            {
+                Display2Rows = value;
+            }
         }
+    }
 
-        rdoHideSubsplits.Checked = !ShowSubsplits && HideSubsplits;
-        rdoShowSubsplits.Checked = ShowSubsplits && !HideSubsplits;
-        rdoNormalSubsplits.Checked = !ShowSubsplits && !HideSubsplits;
+    /// <summary>"Show Column Labels" is unavailable (forced off) in horizontal layouts.</summary>
+    public bool IsColumnLabelsEnabled => Mode != LayoutMode.Horizontal;
 
-        rdoSeconds.Checked = SplitTimesAccuracy == TimeAccuracy.Seconds;
-        rdoTenths.Checked = SplitTimesAccuracy == TimeAccuracy.Tenths;
-        rdoHundredths.Checked = SplitTimesAccuracy == TimeAccuracy.Hundredths;
-        rdoMilliseconds.Checked = SplitTimesAccuracy == TimeAccuracy.Milliseconds;
+    /// <summary>What the "Show Column Labels" box shows: always unchecked in horizontal layouts, <see cref="ShowColumnLabels"/> otherwise.</summary>
+    public bool ShowColumnLabelsShown
+    {
+        get => Mode != LayoutMode.Horizontal && ShowColumnLabels;
+        set
+        {
+            if (Mode != LayoutMode.Horizontal)
+            {
+                ShowColumnLabels = value;
+            }
+        }
+    }
 
-        rdoDeltaSeconds.Checked = DeltasAccuracy == TimeAccuracy.Seconds;
-        rdoDeltaTenths.Checked = DeltasAccuracy == TimeAccuracy.Tenths;
-        rdoDeltaHundredths.Checked = DeltasAccuracy == TimeAccuracy.Hundredths;
-        rdoDeltaMilliseconds.Checked = DeltasAccuracy == TimeAccuracy.Milliseconds;
+    /// <summary>The labels colour is enabled when the labels are shown.</summary>
+    public bool IsLabelsColorEnabled => ShowColumnLabelsShown;
 
-        rdoHeaderAccuracySeconds.Checked = HeaderAccuracy == TimeAccuracy.Seconds;
-        rdoHeaderAccuracyTenths.Checked = HeaderAccuracy == TimeAccuracy.Tenths;
-        rdoHeaderAccuracyHundredths.Checked = HeaderAccuracy == TimeAccuracy.Hundredths;
-        rdoHeaderAccuracyMilliseconds.Checked = HeaderAccuracy == TimeAccuracy.Milliseconds;
+    // Radio button groups. Getters are true for the current accuracy; setting one to true selects it (false is ignored,
+    // the group raises it for the radio that gets deselected).
+    public bool IsSplitTimesSeconds { get => SplitTimesAccuracy == TimeAccuracy.Seconds; set => SelectSplitTimesAccuracy(value, TimeAccuracy.Seconds); }
+    public bool IsSplitTimesTenths { get => SplitTimesAccuracy == TimeAccuracy.Tenths; set => SelectSplitTimesAccuracy(value, TimeAccuracy.Tenths); }
+    public bool IsSplitTimesHundredths { get => SplitTimesAccuracy == TimeAccuracy.Hundredths; set => SelectSplitTimesAccuracy(value, TimeAccuracy.Hundredths); }
+    public bool IsSplitTimesMilliseconds { get => SplitTimesAccuracy == TimeAccuracy.Milliseconds; set => SelectSplitTimesAccuracy(value, TimeAccuracy.Milliseconds); }
+    public bool IsDeltaSeconds { get => DeltasAccuracy == TimeAccuracy.Seconds; set => SelectDeltaAccuracy(value, TimeAccuracy.Seconds); }
+    public bool IsDeltaTenths { get => DeltasAccuracy == TimeAccuracy.Tenths; set => SelectDeltaAccuracy(value, TimeAccuracy.Tenths); }
+    public bool IsDeltaHundredths { get => DeltasAccuracy == TimeAccuracy.Hundredths; set => SelectDeltaAccuracy(value, TimeAccuracy.Hundredths); }
+    public bool IsDeltaMilliseconds { get => DeltasAccuracy == TimeAccuracy.Milliseconds; set => SelectDeltaAccuracy(value, TimeAccuracy.Milliseconds); }
 
-        rdoSectionTimerAccuracySeconds.Checked = SectionTimerAccuracy == TimeAccuracy.Seconds;
-        rdoSectionTimerAccuracyTenths.Checked = SectionTimerAccuracy == TimeAccuracy.Tenths;
-        rdoSectionTimerAccuracyHundredths.Checked = SectionTimerAccuracy == TimeAccuracy.Hundredths;
-        rdoSectionTimerAccuracyMilliseconds.Checked = SectionTimerAccuracy == TimeAccuracy.Milliseconds;
+    private void SelectSplitTimesAccuracy(bool selected, TimeAccuracy accuracy)
+    {
+        if (selected)
+        {
+            SplitTimesAccuracy = accuracy;
+        }
+    }
+
+    private void SelectDeltaAccuracy(bool selected, TimeAccuracy accuracy)
+    {
+        if (selected)
+        {
+            DeltasAccuracy = accuracy;
+        }
+    }
+
+    private void RaiseSplitLayoutChanged()
+    {
+        if (!loading)
+        {
+            SplitLayoutChanged?.Invoke(this, null);
+        }
+    }
+
+    /// <summary>
+    /// The work the old control did in its Load handler, before the page is shown: clamps the split size to the slider
+    /// range of the current layout mode and initialises the columns. Called by <c>SplitsComponent.GetSettingsControl</c>
+    /// after it sets <see cref="Mode"/>.
+    /// </summary>
+    public void PrepareForDisplay()
+    {
+        foreach (ColumnSettings column in ColumnsList.ToList())
+        {
+            column.Initialize();
+        }
 
         if (Mode == LayoutMode.Horizontal)
         {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 5;
-            trkSize.Maximum = 120;
-            SplitWidth = Math.Min(Math.Max(trkSize.Minimum, SplitWidth), trkSize.Maximum);
-            trkSize.DataBindings.Add("Value", this, "SplitWidth", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSplitSize.Text = T("Split Width:");
-            chkDisplayRows.Enabled = false;
-            chkDisplayRows.DataBindings.Clear();
-            chkDisplayRows.Checked = true;
-            chkColumnLabels.DataBindings.Clear();
-            chkColumnLabels.Enabled = chkColumnLabels.Checked = false;
+            SplitWidth = Math.Min(Math.Max(SizeMinimum, SplitWidth), SizeMaximum);
         }
         else
         {
-            trkSize.DataBindings.Clear();
-            trkSize.Minimum = 0;
-            trkSize.Maximum = 250;
-            ScaledSplitHeight = Math.Min(Math.Max(trkSize.Minimum, ScaledSplitHeight), trkSize.Maximum);
-            trkSize.DataBindings.Add("Value", this, "ScaledSplitHeight", false, DataSourceUpdateMode.OnPropertyChanged);
-            lblSplitSize.Text = T("Split Height:");
-            chkDisplayRows.Enabled = true;
-            chkDisplayRows.DataBindings.Clear();
-            chkDisplayRows.DataBindings.Add("Checked", this, "Display2Rows", false, DataSourceUpdateMode.OnPropertyChanged);
-            chkColumnLabels.DataBindings.Clear();
-            chkColumnLabels.Enabled = true;
-            chkColumnLabels.DataBindings.Add("Checked", this, "ShowColumnLabels", false, DataSourceUpdateMode.OnPropertyChanged);
+            ScaledSplitHeight = Math.Min(Math.Max(SizeMinimum, ScaledSplitHeight), SizeMaximum);
+        }
+
+        UpdateColumnButtons();
+    }
+
+    // ---- columns ----
+
+    /// <summary>"Add Column" button: appends a column with an empty name.</summary>
+    public ColumnSettings AddColumn()
+    {
+        var column = new ColumnSettings(CurrentState, "", ColumnsList);
+        ColumnsList.Add(column);
+        return column;
+    }
+
+    private void ColumnsList_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Reset (Clear) does not supply OldItems. Detach removed models as well as replacements.
+        foreach (ColumnSettings column in attachedColumns.Where(x => !ColumnsList.Contains(x)).ToList())
+        {
+            DetachColumn(column);
+        }
+
+        if (e.OldItems != null)
+        {
+            foreach (ColumnSettings column in e.OldItems)
+            {
+                DetachColumn(column);
+            }
+        }
+
+        if (e.NewItems != null)
+        {
+            foreach (ColumnSettings column in e.NewItems)
+            {
+                DetachColumn(column);
+                column.ColumnRemoved += column_ColumnRemoved;
+                column.MovedUp += column_MovedUp;
+                column.MovedDown += column_MovedDown;
+                attachedColumns.Add(column);
+            }
+        }
+
+        UpdateColumnButtons();
+    }
+
+    private void DetachColumn(ColumnSettings column)
+    {
+        attachedColumns.Remove(column);
+        column.ColumnRemoved -= column_ColumnRemoved;
+        column.MovedUp -= column_MovedUp;
+        column.MovedDown -= column_MovedDown;
+    }
+
+    private void UpdateColumnButtons()
+    {
+        foreach (ColumnSettings column in ColumnsList)
+        {
+            column.UpdateEnabledButtons();
         }
     }
 
+    private void column_MovedDown(object sender, EventArgs e)
+    {
+        var column = (ColumnSettings)sender;
+        int index = ColumnsList.IndexOf(column);
+        if (index >= 0 && index < ColumnsList.Count - 1)
+        {
+            ColumnsList.Move(index, index + 1);
+        }
+    }
+
+    private void column_MovedUp(object sender, EventArgs e)
+    {
+        var column = (ColumnSettings)sender;
+        int index = ColumnsList.IndexOf(column);
+        if (index > 0)
+        {
+            ColumnsList.Move(index, index - 1);
+        }
+    }
+
+    private void column_ColumnRemoved(object sender, EventArgs e)
+    {
+        ColumnsList.Remove((ColumnSettings)sender);
+    }
+
+    private int minimumMajorSplits;
+    public int MinimumMajorSplits
+    {
+        get => minimumMajorSplits;
+        set => SetField(ref minimumMajorSplits, value);
+    }
+
+    private string headerComparison;
+    public string HeaderComparison
+    {
+        get => headerComparison;
+        set
+        {
+            if (SetField(ref headerComparison, value))
+            {
+                OnPropertyChanged(nameof(HeaderComparisonOptions));
+            }
+        }
+    }
+
+    private string headerTimingMethod;
+    public string HeaderTimingMethod
+    {
+        get => headerTimingMethod;
+        set => SetField(ref headerTimingMethod, value);
+    }
+
+    private bool indentBlankIcons;
+    public bool IndentBlankIcons
+    {
+        get => indentBlankIcons;
+        set
+        {
+            if (SetField(ref indentBlankIcons, value))
+            {
+                RaiseSplitLayoutChanged();
+            }
+        }
+    }
+
+    private bool indentSubsplits;
+    public bool IndentSubsplits
+    {
+        get => indentSubsplits;
+        set
+        {
+            if (SetField(ref indentSubsplits, value))
+            {
+                OnPropertyChanged(nameof(IsIndentSectionSplitEnabled));
+            }
+        }
+    }
+
+    private bool hideSubsplits;
+    public bool HideSubsplits
+    {
+        get => hideSubsplits;
+        set
+        {
+            if (SetField(ref hideSubsplits, value))
+            {
+                OnPropertyChanged(nameof(IsHideSubsplits));
+                OnPropertyChanged(nameof(IsNormalSubsplits));
+                OnPropertyChanged(nameof(IsShowSubsplits));
+                OnPropertyChanged(nameof(IsCurrentSectionOnlyEnabled));
+                OnPropertyChanged(nameof(IsIndentSubsplitsEnabled));
+                OnPropertyChanged(nameof(IsIndentSectionSplitEnabled));
+                OnPropertyChanged(nameof(IsMinimumMajorSplitsEnabled));
+            }
+        }
+    }
+
+    private bool showSubsplits;
+    public bool ShowSubsplits
+    {
+        get => showSubsplits;
+        set
+        {
+            if (SetField(ref showSubsplits, value))
+            {
+                OnPropertyChanged(nameof(IsHideSubsplits));
+                OnPropertyChanged(nameof(IsNormalSubsplits));
+                OnPropertyChanged(nameof(IsShowSubsplits));
+                OnPropertyChanged(nameof(IsCurrentSectionOnlyEnabled));
+                OnPropertyChanged(nameof(IsIndentSubsplitsEnabled));
+                OnPropertyChanged(nameof(IsIndentSectionSplitEnabled));
+                OnPropertyChanged(nameof(IsMinimumMajorSplitsEnabled));
+            }
+        }
+    }
+
+    private bool currentSectionOnly;
+    public bool CurrentSectionOnly
+    {
+        get => currentSectionOnly;
+        set => SetField(ref currentSectionOnly, value);
+    }
+
+    private bool overrideSubsplitColor;
+    public bool OverrideSubsplitColor
+    {
+        get => overrideSubsplitColor;
+        set
+        {
+            if (SetField(ref overrideSubsplitColor, value))
+            {
+                OnPropertyChanged(nameof(IsSubsplitColorEnabled));
+            }
+        }
+    }
+
+    private Color subsplitTopColor;
+    public Color SubsplitTopColor
+    {
+        get => subsplitTopColor;
+        set
+        {
+            if (SetField(ref subsplitTopColor, value))
+            {
+                OnPropertyChanged(nameof(SubsplitBottomSwatchColor));
+            }
+        }
+    }
+
+    private Color subsplitBottomColor;
+    public Color SubsplitBottomColor
+    {
+        get => subsplitBottomColor;
+        set
+        {
+            if (SetField(ref subsplitBottomColor, value))
+            {
+                OnPropertyChanged(nameof(SubsplitBottomSwatchColor));
+            }
+        }
+    }
+
+    private GradientType subsplitGradient;
+    public GradientType SubsplitGradient
+    {
+        get => subsplitGradient;
+        set
+        {
+            if (SetField(ref subsplitGradient, value))
+            {
+                OnPropertyChanged(nameof(SubsplitGradientString));
+                OnPropertyChanged(nameof(IsSubsplitTopColorVisible));
+                OnPropertyChanged(nameof(SubsplitBottomSwatchColor));
+            }
+        }
+    }
+
+    private bool showHeader;
+    public bool ShowHeader
+    {
+        get => showHeader;
+        set
+        {
+            if (SetField(ref showHeader, value))
+            {
+                OnPropertyChanged(nameof(IsHeaderOptionsEnabled));
+                OnPropertyChanged(nameof(IsHeaderTextColorEnabled));
+                OnPropertyChanged(nameof(IsSectionTimerOptionsEnabled));
+            }
+        }
+    }
+
+    private bool indentSectionSplit;
+    public bool IndentSectionSplit
+    {
+        get => indentSectionSplit;
+        set => SetField(ref indentSectionSplit, value);
+    }
+
+    private bool showIconSectionSplit;
+    public bool ShowIconSectionSplit
+    {
+        get => showIconSectionSplit;
+        set => SetField(ref showIconSectionSplit, value);
+    }
+
+    private bool showSectionIcon;
+    public bool ShowSectionIcon
+    {
+        get => showSectionIcon;
+        set => SetField(ref showSectionIcon, value);
+    }
+
+    private Color headerTopColor;
+    public Color HeaderTopColor
+    {
+        get => headerTopColor;
+        set
+        {
+            if (SetField(ref headerTopColor, value))
+            {
+                OnPropertyChanged(nameof(HeaderBottomSwatchColor));
+            }
+        }
+    }
+
+    private Color headerBottomColor;
+    public Color HeaderBottomColor
+    {
+        get => headerBottomColor;
+        set
+        {
+            if (SetField(ref headerBottomColor, value))
+            {
+                OnPropertyChanged(nameof(HeaderBottomSwatchColor));
+            }
+        }
+    }
+
+    private GradientType headerGradient;
+    public GradientType HeaderGradient
+    {
+        get => headerGradient;
+        set
+        {
+            if (SetField(ref headerGradient, value))
+            {
+                OnPropertyChanged(nameof(HeaderGradientString));
+                OnPropertyChanged(nameof(IsHeaderTopColorVisible));
+                OnPropertyChanged(nameof(HeaderBottomSwatchColor));
+            }
+        }
+    }
+
+    private bool overrideHeaderColor;
+    public bool OverrideHeaderColor
+    {
+        get => overrideHeaderColor;
+        set
+        {
+            if (SetField(ref overrideHeaderColor, value))
+            {
+                OnPropertyChanged(nameof(IsHeaderTextColorEnabled));
+            }
+        }
+    }
+
+    private Color headerTextColor;
+    public Color HeaderTextColor
+    {
+        get => headerTextColor;
+        set => SetField(ref headerTextColor, value);
+    }
+
+    private bool headerText;
+    public bool HeaderText
+    {
+        get => headerText;
+        set => SetField(ref headerText, value);
+    }
+
+    private Color headerTimesColor;
+    public Color HeaderTimesColor
+    {
+        get => headerTimesColor;
+        set => SetField(ref headerTimesColor, value);
+    }
+
+    private bool headerTimes;
+    public bool HeaderTimes
+    {
+        get => headerTimes;
+        set => SetField(ref headerTimes, value);
+    }
+
+    private TimeAccuracy headerAccuracy;
+    public TimeAccuracy HeaderAccuracy
+    {
+        get => headerAccuracy;
+        set
+        {
+            if (SetField(ref headerAccuracy, value))
+            {
+                OnPropertyChanged(nameof(IsHeaderAccuracySeconds));
+                OnPropertyChanged(nameof(IsHeaderAccuracyTenths));
+                OnPropertyChanged(nameof(IsHeaderAccuracyHundredths));
+                OnPropertyChanged(nameof(IsHeaderAccuracyMilliseconds));
+            }
+        }
+    }
+
+    private bool sectionTimer;
+    public bool SectionTimer
+    {
+        get => sectionTimer;
+        set
+        {
+            if (SetField(ref sectionTimer, value))
+            {
+                OnPropertyChanged(nameof(IsSectionTimerOptionsEnabled));
+            }
+        }
+    }
+
+    private Color sectionTimerColor;
+    public Color SectionTimerColor
+    {
+        get => sectionTimerColor;
+        set => SetField(ref sectionTimerColor, value);
+    }
+
+    private bool sectionTimerGradient;
+    public bool SectionTimerGradient
+    {
+        get => sectionTimerGradient;
+        set => SetField(ref sectionTimerGradient, value);
+    }
+
+    private TimeAccuracy sectionTimerAccuracy;
+    public TimeAccuracy SectionTimerAccuracy
+    {
+        get => sectionTimerAccuracy;
+        set
+        {
+            if (SetField(ref sectionTimerAccuracy, value))
+            {
+                OnPropertyChanged(nameof(IsSectionTimerAccuracySeconds));
+                OnPropertyChanged(nameof(IsSectionTimerAccuracyTenths));
+                OnPropertyChanged(nameof(IsSectionTimerAccuracyHundredths));
+                OnPropertyChanged(nameof(IsSectionTimerAccuracyMilliseconds));
+            }
+        }
+    }
+
+    public static ISegment HilightSplit { get; set; }
+    public static ISegment SectionSplit { get; set; }
+
+    public string SubsplitGradientString
+    {
+        get => SubsplitGradient.ToString();
+        set => SubsplitGradient = Enum.Parse<GradientType>(value);
+    }
+    public bool IsSubsplitTopColorVisible => SubsplitGradient != GradientType.Plain;
+    public Color SubsplitBottomSwatchColor
+    {
+        get => IsSubsplitTopColorVisible ? SubsplitBottomColor : SubsplitTopColor;
+        set { if (IsSubsplitTopColorVisible) SubsplitBottomColor = value; else SubsplitTopColor = value; }
+    }
+
+    public string HeaderGradientString
+    {
+        get => HeaderGradient.ToString();
+        set => HeaderGradient = Enum.Parse<GradientType>(value);
+    }
+    public bool IsHeaderTopColorVisible => HeaderGradient != GradientType.Plain;
+    public Color HeaderBottomSwatchColor
+    {
+        get => IsHeaderTopColorVisible ? HeaderBottomColor : HeaderTopColor;
+        set { if (IsHeaderTopColorVisible) HeaderBottomColor = value; else HeaderTopColor = value; }
+    }
+
+    public bool IsHeaderAccuracySeconds { get => HeaderAccuracy == TimeAccuracy.Seconds; set { if (value) HeaderAccuracy = TimeAccuracy.Seconds; } }
+
+    public bool IsHeaderAccuracyTenths { get => HeaderAccuracy == TimeAccuracy.Tenths; set { if (value) HeaderAccuracy = TimeAccuracy.Tenths; } }
+
+    public bool IsHeaderAccuracyHundredths { get => HeaderAccuracy == TimeAccuracy.Hundredths; set { if (value) HeaderAccuracy = TimeAccuracy.Hundredths; } }
+
+    public bool IsHeaderAccuracyMilliseconds { get => HeaderAccuracy == TimeAccuracy.Milliseconds; set { if (value) HeaderAccuracy = TimeAccuracy.Milliseconds; } }
+
+    public bool IsSectionTimerAccuracySeconds { get => SectionTimerAccuracy == TimeAccuracy.Seconds; set { if (value) SectionTimerAccuracy = TimeAccuracy.Seconds; } }
+
+    public bool IsSectionTimerAccuracyTenths { get => SectionTimerAccuracy == TimeAccuracy.Tenths; set { if (value) SectionTimerAccuracy = TimeAccuracy.Tenths; } }
+
+    public bool IsSectionTimerAccuracyHundredths { get => SectionTimerAccuracy == TimeAccuracy.Hundredths; set { if (value) SectionTimerAccuracy = TimeAccuracy.Hundredths; } }
+
+    public bool IsSectionTimerAccuracyMilliseconds { get => SectionTimerAccuracy == TimeAccuracy.Milliseconds; set { if (value) SectionTimerAccuracy = TimeAccuracy.Milliseconds; } }
+
+    public bool IsHideSubsplits { get => HideSubsplits && !ShowSubsplits; set { if (value) { HideSubsplits = true; ShowSubsplits = false; } } }
+    public bool IsShowSubsplits { get => ShowSubsplits && !HideSubsplits; set { if (value) { ShowSubsplits = true; HideSubsplits = false; CurrentSectionOnly = false; } } }
+    public bool IsNormalSubsplits { get => !ShowSubsplits && !HideSubsplits; set { if (value) { ShowSubsplits = false; HideSubsplits = false; } } }
+    public bool IsCurrentSectionOnlyEnabled => !ShowSubsplits;
+    public bool IsIndentSubsplitsEnabled => !HideSubsplits;
+    public bool IsIndentSectionSplitEnabled => IsNormalSubsplits && IndentSubsplits;
+    public bool IsMinimumMajorSplitsEnabled => IsNormalSubsplits;
+    public bool IsSubsplitColorEnabled => OverrideSubsplitColor;
+    public bool IsHeaderOptionsEnabled => ShowHeader;
+    public bool IsHeaderTextColorEnabled => ShowHeader && OverrideHeaderColor;
+    public bool IsSectionTimerOptionsEnabled => ShowHeader && SectionTimer;
+    public static readonly string[] HeaderTimingMethodOptions = ["Current Timing Method", "Real Time", "Game Time"];
+    public IReadOnlyList<string> HeaderComparisonOptions => new[] { "Current Comparison" }
+        .Concat(CurrentState?.Run?.Comparisons.Where(x => x != NoneComparisonGenerator.ComparisonName) ?? [])
+        .Append(HeaderComparison).Distinct().ToArray();
+
     public void SetSettings(XmlNode node)
+    {
+        loading = true;
+        try { SetSettingsCore(node); }
+        finally { loading = false; }
+    }
+
+    private void SetSettingsCore(XmlNode node)
     {
         var element = (XmlElement)node;
         Version version = SettingsHelper.ParseVersion(element["Version"]);
@@ -734,230 +1351,4 @@ public partial class SplitsSettings : UserControl
         return hashCode;
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
-
-    private void rdoHideSubsplits_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSubsplitVisibility();
-    }
-
-    private void rdoNormalSubsplits_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSubsplitVisibility();
-    }
-
-    private void rdoShowSubsplits_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSubsplitVisibility();
-    }
-
-    private void chkOverrideSubsplitColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label15.Enabled = btnSubsplitTopColor.Enabled = btnSubsplitBottomColor.Enabled = cmbSubsplitGradient.Enabled = chkOverrideSubsplitColor.Checked;
-    }
-
-    private void cmbSubsplitGradient_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnSubsplitTopColor.Visible = cmbSubsplitGradient.SelectedItem.ToString() != "Plain";
-        btnSubsplitBottomColor.DataBindings.Clear();
-        btnSubsplitBottomColor.DataBindings.Add("BackColor", this, btnSubsplitTopColor.Visible ? "SubsplitBottomColor" : "SubsplitTopColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        SubsplitGradientString = cmbSubsplitGradient.SelectedItem.ToString();
-    }
-
-    private void chkShowHeader_CheckedChanged(object sender, EventArgs e)
-    {
-        chkShowSectionIcon.Enabled = groupBox12.Enabled = groupBox13.Enabled
-            = lblComparison.Enabled = cmbHeaderComparison.Enabled = lblTimingMethod.Enabled = cmbHeaderTimingMethod.Enabled
-            = chkShowHeader.Checked;
-    }
-
-    private void cmbHeaderGradient_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnHeaderTopColor.Visible = cmbHeaderGradient.SelectedItem.ToString() != "Plain";
-        btnHeaderBottomColor.DataBindings.Clear();
-        btnHeaderBottomColor.DataBindings.Add("BackColor", this, btnHeaderTopColor.Visible ? "HeaderBottomColor" : "HeaderTopColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        HeaderGradientString = cmbHeaderGradient.SelectedItem.ToString();
-    }
-
-    private void chkOverrideHeaderColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label17.Enabled = btnHeaderTextColor.Enabled = label18.Enabled = btnHeaderTimesColor.Enabled = chkOverrideHeaderColor.Checked;
-    }
-
-    private void UpdateHeaderAccuracy()
-    {
-        HeaderAccuracy =
-            rdoHeaderAccuracySeconds.Checked ? TimeAccuracy.Seconds
-            : rdoHeaderAccuracyTenths.Checked ? TimeAccuracy.Tenths
-            : rdoHeaderAccuracyHundredths.Checked ? TimeAccuracy.Hundredths
-            : TimeAccuracy.Milliseconds;
-    }
-
-    private void rdoHeaderAccuracySeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateHeaderAccuracy();
-    }
-
-    private void rdoHeaderAccuracyTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateHeaderAccuracy();
-    }
-
-    private void rdoHeaderAccuracyHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateHeaderAccuracy();
-    }
-
-    private void chkSectionTimer_CheckedChanged(object sender, EventArgs e)
-    {
-        label19.Enabled = btnSectionTimerColor.Enabled = chkSectionTimerGradient.Enabled = groupBox14.Enabled = chkSectionTimer.Checked;
-    }
-
-    private void UpdateSectionTimerAccuracy()
-    {
-        SectionTimerAccuracy = rdoSectionTimerAccuracySeconds.Checked
-            ? TimeAccuracy.Seconds
-            : rdoSectionTimerAccuracyTenths.Checked
-                ? TimeAccuracy.Tenths
-                : rdoSectionTimerAccuracyHundredths.Checked ? TimeAccuracy.Hundredths : TimeAccuracy.Milliseconds;
-    }
-
-    private void rdoSectionTimerAccuracySeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSectionTimerAccuracy();
-    }
-
-    private void rdoSectionTimerAccuracyTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSectionTimerAccuracy();
-    }
-
-    private void rdoSectionTimerAccuracyHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateSectionTimerAccuracy();
-    }
-
-    private void cmbHeaderComparison_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        HeaderComparison = cmbHeaderComparison.SelectedItem.ToString();
-    }
-
-    private void cmbHeaderTimingMethod_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        HeaderTimingMethod = cmbHeaderTimingMethod.SelectedItem.ToString();
-    }
-
-    private void chkIndentSubsplits_CheckedChanged(object sender, EventArgs e)
-    {
-        if (!ShowSubsplits && !HideSubsplits)
-        {
-            chkIndentSectionSplit.Enabled = chkIndentSubsplits.Checked;
-        }
-    }
-
-    private void ResetColumns()
-    {
-        ClearLayout();
-        int index = 1;
-        foreach (ColumnSettings column in ColumnsList)
-        {
-            UpdateLayoutForColumn();
-            AddColumnToLayout(column, index);
-            column.UpdateEnabledButtons();
-            index++;
-        }
-    }
-
-    private void AddColumnToLayout(ColumnSettings column, int index)
-    {
-        tableColumns.Controls.Add(column, 0, index);
-        tableColumns.SetColumnSpan(column, 4);
-        column.ColumnRemoved -= column_ColumnRemoved;
-        column.MovedUp -= column_MovedUp;
-        column.MovedDown -= column_MovedDown;
-        column.ColumnRemoved += column_ColumnRemoved;
-        column.MovedUp += column_MovedUp;
-        column.MovedDown += column_MovedDown;
-    }
-
-    private void column_MovedDown(object sender, EventArgs e)
-    {
-        var column = (ColumnSettings)sender;
-        int index = ColumnsList.IndexOf(column);
-        ColumnsList.Remove(column);
-        ColumnsList.Insert(index + 1, column);
-        ResetColumns();
-        column.SelectControl();
-    }
-
-    private void column_MovedUp(object sender, EventArgs e)
-    {
-        var column = (ColumnSettings)sender;
-        int index = ColumnsList.IndexOf(column);
-        ColumnsList.Remove(column);
-        ColumnsList.Insert(index - 1, column);
-        ResetColumns();
-        column.SelectControl();
-    }
-
-    private void column_ColumnRemoved(object sender, EventArgs e)
-    {
-        var column = (ColumnSettings)sender;
-        int index = ColumnsList.IndexOf(column);
-        ColumnsList.Remove(column);
-        ResetColumns();
-        if (ColumnsList.Count > 0)
-        {
-            ColumnsList[^1].SelectControl();
-        }
-        else
-        {
-            chkColumnLabels.Select();
-        }
-    }
-
-    private void ClearLayout()
-    {
-        tableColumns.RowCount = 1;
-        tableColumns.RowStyles.Clear();
-        tableColumns.RowStyles.Add(new RowStyle(SizeType.Absolute, StartingTableLayoutSize.Height));
-        tableColumns.Size = StartingTableLayoutSize;
-        foreach (ColumnSettings control in tableColumns.Controls.OfType<ColumnSettings>().ToList())
-        {
-            tableColumns.Controls.Remove(control);
-        }
-
-        Size = StartingSize;
-    }
-
-    private void UpdateLayoutForColumn()
-    {
-        tableColumns.RowCount++;
-        tableColumns.RowStyles.Add(new RowStyle(SizeType.Absolute, startingColumnSettingHeight));
-        tableColumns.Size = new Size(tableColumns.Size.Width, tableColumns.Size.Height + startingColumnSettingHeight);
-        Size = new Size(Size.Width, Size.Height + startingColumnSettingHeight);
-        groupColumns.Size = new Size(groupColumns.Size.Width, groupColumns.Size.Height + startingColumnSettingHeight);
-    }
-
-    private void btnAddColumn_Click(object sender, EventArgs e)
-    {
-        UpdateLayoutForColumn();
-
-        var columnControl = new ColumnSettings(CurrentState, "", ColumnsList);
-        ColumnsList.Add(columnControl);
-        AddColumnToLayout(columnControl, ColumnsList.Count);
-
-        foreach (ColumnSettings column in ColumnsList)
-        {
-            column.UpdateEnabledButtons();
-        }
-    }
-
-    private void chkAutomaticAbbreviation_CheckedChanged(object sender, EventArgs e)
-    {
-        AutomaticAbbreviation = chkAutomaticAbbreviation.Checked;
-    }
 }

@@ -1,28 +1,116 @@
-﻿using LiveSplit.Model;
+﻿using LiveSplit.Localization;
+using LiveSplit.Model;
 using LiveSplit.Model.Comparisons;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
-public partial class ColumnSettings : UserControl
+/// <summary>
+/// Model of one entry of the "Columns" list of the Splits settings (it used to be a user control per column).
+/// Wraps a <see cref="ColumnData"/> (what the component renders from) and adds the view state: the comparison items,
+/// the group title and the enabled state of the move buttons. A view binds one editor per instance.
+/// </summary>
+public class ColumnSettings : SettingsBase
 {
-    public string ColumnName { get => Data.Name; set => Data.Name = value; }
+    private static string T(string source) => UiLocalizer.Translate(source, LanguageResolver.ResolveCurrentCultureLanguage());
+
+    /// <summary>Items of the column type drop down (<see cref="Type"/>), in <see cref="ColumnType"/> order.</summary>
+    public static readonly string[] ColumnTypeOptions = ["Delta", "Split Time", "Delta or Split Time", "Segment Delta", "Segment Time", "Segment Delta or Segment Time", "Custom Variable"];
+    /// <summary>Items of the timing method drop down (<see cref="TimingMethod"/>).</summary>
+    public static readonly string[] TimingMethodOptions = ["Current Timing Method", "Real Time", "Game Time"];
+
+    private ColumnData data;
+    private IReadOnlyList<string> comparisonOptions;
+    private bool canMoveUp;
+    private bool canMoveDown;
+
+    public ColumnData Data
+    {
+        get => data;
+        set
+        {
+            if (SetField(ref data, value))
+            {
+                OnPropertyChanged(nameof(ColumnName));
+                OnPropertyChanged(nameof(Type));
+                OnPropertyChanged(nameof(Comparison));
+                OnPropertyChanged(nameof(TimingMethod));
+                OnPropertyChanged(nameof(GroupTitle));
+                comparisonOptions = BuildComparisonOptions();
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+
+    public string ColumnName
+    {
+        get => Data.Name;
+        set
+        {
+            if (Data.Name != value)
+            {
+                Data.Name = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(GroupTitle));
+            }
+        }
+    }
+
+    /// <summary>The column type as shown in the drop down (one of <see cref="ColumnTypeOptions"/>).</summary>
     public string Type
     {
         get => GetColumnType(Data.Type);
         set
         {
-            Data.Type = ParseColumnType(value);
-            UpdateComparisonItems();
+            ColumnType type = ParseColumnType(value);
+            if (Data.Type != type)
+            {
+                Data.Type = type;
+                OnPropertyChanged();
+                UpdateComparisonItems();
+            }
         }
     }
-    public string Comparison { get => Data.Comparison; set => Data.Comparison = value; }
-    public string TimingMethod { get => Data.TimingMethod; set => Data.TimingMethod = value; }
 
-    public ColumnData Data { get; set; }
+    /// <summary>"Current Comparison" or the name of a comparison (one of <see cref="ComparisonOptions"/>).</summary>
+    public string Comparison
+    {
+        get => Data.Comparison;
+        set
+        {
+            if (Data.Comparison != value)
+            {
+                Data.Comparison = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>One of <see cref="TimingMethodOptions"/>.</summary>
+    public string TimingMethod
+    {
+        get => Data.TimingMethod;
+        set
+        {
+            if (Data.TimingMethod != value)
+            {
+                Data.TimingMethod = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>Items of the comparison drop down. Depends on <see cref="Type"/> and on the comparisons of the run.</summary>
+    public IReadOnlyList<string> ComparisonOptions => comparisonOptions;
+
+    /// <summary>Title of the group box around the column editor: "Column: &lt;name&gt;" (translated).</summary>
+    public string GroupTitle => string.Format(T("Column: {0}"), ColumnName);
+
+    public bool CanMoveUp { get => canMoveUp; private set => SetField(ref canMoveUp, value); }
+    public bool CanMoveDown { get => canMoveDown; private set => SetField(ref canMoveDown, value); }
+
     protected LiveSplitState CurrentState { get; set; }
     protected IList<ColumnSettings> ColumnsList { get; set; }
 
@@ -35,137 +123,108 @@ public partial class ColumnSettings : UserControl
 
     public ColumnSettings(LiveSplitState state, string columnName, IList<ColumnSettings> columnsList)
     {
-        InitializeComponent();
-
-        Data = new ColumnData(columnName, ColumnType.Delta, "Current Comparison", "Current Timing Method");
+        data = new ColumnData(columnName, ColumnType.Delta, "Current Comparison", "Current Timing Method");
 
         CurrentState = state;
         ColumnsList = columnsList;
+        comparisonOptions = BuildComparisonOptions();
     }
 
-    private void cmbTimingMethod_SelectedIndexChanged(object sender, EventArgs e)
+    /// <summary>
+    /// What the old control did when it was loaded into the settings page: translate the legacy "Time" name and rebuild
+    /// the comparison items (which can reset an invalid comparison to "Current Comparison"). Called by
+    /// <see cref="SplitsSettings.PrepareForDisplay"/>, so a view does not need to call it.
+    /// </summary>
+    public void Initialize()
     {
-        TimingMethod = cmbTimingMethod.SelectedItem.ToString();
-    }
+        if (string.Equals(ColumnName, "Time", StringComparison.Ordinal))
+        {
+            ColumnName = T("Time");
+        }
 
-    private void cmbComparison_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Comparison = cmbComparison.SelectedItem.ToString();
-    }
-
-    private void cmbColumnType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Type = cmbColumnType.SelectedItem.ToString();
-    }
-
-    private void ColumnSettings_Load(object sender, EventArgs e)
-    {
         UpdateComparisonItems();
-
-        txtName.DataBindings.Clear();
-        cmbColumnType.DataBindings.Clear();
-        cmbTimingMethod.DataBindings.Clear();
-        txtName.DataBindings.Add("Text", this, "ColumnName", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbColumnType.DataBindings.Add("SelectedItem", this, "Type", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbTimingMethod.DataBindings.Add("SelectedItem", this, "TimingMethod", false, DataSourceUpdateMode.OnPropertyChanged);
     }
 
+    /// <summary>Recomputes <see cref="CanMoveUp"/> and <see cref="CanMoveDown"/> from the position in the column list.</summary>
     public void UpdateEnabledButtons()
     {
-        btnMoveDown.Enabled = ColumnIndex < TotalColumns - 1;
-        btnMoveUp.Enabled = ColumnIndex > 0;
+        CanMoveDown = ColumnIndex < TotalColumns - 1;
+        CanMoveUp = ColumnIndex > 0;
     }
 
-    private void txtName_TextChanged(object sender, EventArgs e)
+    /// <summary>"Remove Column" button.</summary>
+    public void Remove()
     {
-        groupColumn.Text = $"Column: {txtName.Text}";
+        ColumnRemoved?.Invoke(this, null);
+    }
+
+    /// <summary>"Move Up" button.</summary>
+    public void MoveUp()
+    {
+        MovedUp?.Invoke(this, null);
+    }
+
+    /// <summary>"Move Down" button.</summary>
+    public void MoveDown()
+    {
+        MovedDown?.Invoke(this, null);
     }
 
     private void UpdateComparisonItems()
     {
-        cmbComparison.Items.Clear();
-        cmbComparison.Items.Add("Current Comparison");
-
-        if (Data.Type is ColumnType.Delta or ColumnType.DeltaorSplitTime or ColumnType.SplitTime)
+        if (!IsTypeWithBestSplitTimes(Data.Type) && Comparison == BestSplitTimesComparisonGenerator.ComparisonName)
         {
-            cmbComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x != NoneComparisonGenerator.ComparisonName).ToArray());
+            Comparison = "Current Comparison";
+        }
+
+        comparisonOptions = BuildComparisonOptions();
+        OnPropertyChanged(nameof(ComparisonOptions));
+    }
+
+    private static bool IsTypeWithBestSplitTimes(ColumnType type)
+    {
+        return type is ColumnType.Delta or ColumnType.DeltaorSplitTime or ColumnType.SplitTime;
+    }
+
+    private List<string> BuildComparisonOptions()
+    {
+        var items = new List<string> { "Current Comparison" };
+        IEnumerable<string> comparisons = CurrentState?.Run?.Comparisons ?? [];
+
+        if (IsTypeWithBestSplitTimes(Data.Type))
+        {
+            items.AddRange(comparisons.Where(x => x != NoneComparisonGenerator.ComparisonName));
         }
         else
         {
-            cmbComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName).ToArray());
-            if (Comparison == BestSplitTimesComparisonGenerator.ComparisonName)
-            {
-                Comparison = "Current Comparison";
-            }
+            items.AddRange(comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName));
         }
 
-        if (!cmbComparison.Items.Contains(Comparison))
+        if (Comparison != null && !items.Contains(Comparison))
         {
-            cmbComparison.Items.Add(Comparison);
+            items.Add(Comparison);
         }
 
-        cmbComparison.DataBindings.Clear();
-        cmbComparison.DataBindings.Add("SelectedItem", this, "Comparison", false, DataSourceUpdateMode.OnPropertyChanged);
+        return items;
     }
 
     private static string GetColumnType(ColumnType type)
     {
-        if (type == ColumnType.SplitTime)
+        return type switch
         {
-            return "Split Time";
-        }
-        else if (type == ColumnType.Delta)
-        {
-            return "Delta";
-        }
-        else if (type == ColumnType.DeltaorSplitTime)
-        {
-            return "Delta or Split Time";
-        }
-        else if (type == ColumnType.SegmentTime)
-        {
-            return "Segment Time";
-        }
-        else if (type == ColumnType.SegmentDelta)
-        {
-            return "Segment Delta";
-        }
-        else if (type == ColumnType.SegmentDeltaorSegmentTime)
-        {
-            return "Segment Delta or Segment Time";
-        }
-        else if (type == ColumnType.CustomVariable)
-        {
-            return "Custom Variable";
-        }
-        else
-        {
-            return "Unknown";
-        }
+            ColumnType.SplitTime => "Split Time",
+            ColumnType.Delta => "Delta",
+            ColumnType.DeltaorSplitTime => "Delta or Split Time",
+            ColumnType.SegmentTime => "Segment Time",
+            ColumnType.SegmentDelta => "Segment Delta",
+            ColumnType.SegmentDeltaorSegmentTime => "Segment Delta or Segment Time",
+            ColumnType.CustomVariable => "Custom Variable",
+            _ => "Unknown",
+        };
     }
 
     private static ColumnType ParseColumnType(string columnType)
     {
         return (ColumnType)Enum.Parse(typeof(ColumnType), columnType.Replace(" ", string.Empty));
-    }
-
-    private void btnRemoveColumn_Click(object sender, EventArgs e)
-    {
-        ColumnRemoved?.Invoke(this, null);
-    }
-
-    private void btnMoveUp_Click(object sender, EventArgs e)
-    {
-        MovedUp?.Invoke(this, null);
-    }
-
-    private void btnMoveDown_Click(object sender, EventArgs e)
-    {
-        MovedDown?.Invoke(this, null);
-    }
-
-    public void SelectControl()
-    {
-        btnRemoveColumn.Select();
     }
 }
