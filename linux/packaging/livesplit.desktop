@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LiveSplit
+Comment=Speedrun timer for Linux
+Exec=livesplit %F
+Icon=livesplit
+Terminal=false
+Categories=Game;Utility;
+MimeType=application/x-livesplit-splits;application/x-livesplit-layout;
+Keywords=speedrun;timer;splits;livesplit;
+StartupWMClass=LiveSplit

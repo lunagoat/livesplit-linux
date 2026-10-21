@@ -77,9 +77,16 @@
 
   <Target Name="CopyComponentsToOutput" AfterTargets="Build" Condition="'@(ComponentProject)' != ''">
     <ItemGroup>
-      <_BuiltComponentFile Include="$(ArtifactsPath)/build/Components/*.dll" Exclude="$(ArtifactsPath)/build/Components/LiveSplit.Core.dll;$(ArtifactsPath)/build/Components/LiveSplit.Drawing.dll;$(ArtifactsPath)/build/Components/SpeedrunComSharp.dll" />
+      <_BuiltComponentFile Include="$(BuildPath)/Components/*.dll;$(ArtifactsPath)/build/Components/*.dll" Exclude="$(BuildPath)/Components/LiveSplit.Core.dll;$(BuildPath)/Components/LiveSplit.Drawing.dll;$(BuildPath)/Components/SpeedrunComSharp.dll;$(ArtifactsPath)/build/Components/LiveSplit.Core.dll;$(ArtifactsPath)/build/Components/LiveSplit.Drawing.dll;$(ArtifactsPath)/build/Components/SpeedrunComSharp.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_BuiltComponentFile)" DestinationFolder="$(OutDir)Components" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyComponentsToPublish" AfterTargets="Publish" Condition="'@(ComponentProject)' != ''">
+    <ItemGroup>
+      <_BuiltComponentFilePublish Include="$(BuildPath)/Components/*.dll;$(ArtifactsPath)/build/Components/*.dll" Exclude="$(BuildPath)/Components/LiveSplit.Core.dll;$(BuildPath)/Components/LiveSplit.Drawing.dll;$(BuildPath)/Components/SpeedrunComSharp.dll;$(ArtifactsPath)/build/Components/LiveSplit.Core.dll;$(ArtifactsPath)/build/Components/LiveSplit.Drawing.dll;$(ArtifactsPath)/build/Components/SpeedrunComSharp.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_BuiltComponentFilePublish)" DestinationFolder="$(PublishDir)Components" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

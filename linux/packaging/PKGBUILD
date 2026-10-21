@@ -1,0 +1,89 @@
+# Maintainer: luna <lunagoat@pm.me>
+pkgname=livesplit
+pkgver=1.8.31
+pkgrel=1
+pkgdesc="Speedrun timer for Linux (native C#/.NET 10 + Avalonia + Skia port)"
+arch=('x86_64')
+url="https://livesplit.org"
+license=('MIT')
+
+# Note: libSkiaSharp and libHarfBuzzSharp are bundled by SkiaSharp.NativeAssets.Linux
+depends=(
+    'dotnet-runtime>=10'
+    'fontconfig'
+)
+makedepends=(
+    'dotnet-sdk'
+    'rust'
+    'cargo'
+    'git'
+)
+optdepends=(
+    'libsecret: secure credentials storage for speedrun.com / twitch'
+    'python: for livesplit-ctl socket control CLI'
+)
+source=(
+    "livesplit"
+    "livesplit-ctl"
+    "livesplit.desktop"
+    "livesplit.xml"
+)
+sha256sums=(
+    'SKIP'
+    'SKIP'
+    'SKIP'
+    'SKIP'
+)
+
+build() {
+    local repo_root
+    if [ -f "$startdir/../build.sh" ]; then
+        repo_root="$startdir/../.."
+    elif [ -d "$srcdir/$pkgname" ]; then
+        repo_root="$srcdir/$pkgname"
+    else
+        repo_root="$srcdir"
+    fi
+
+    cd "$repo_root"
+    bash linux/build.sh
+}
+
+package() {
+    local repo_root
+    if [ -f "$startdir/../build.sh" ]; then
+        repo_root="$startdir/../.."
+    elif [ -d "$srcdir/$pkgname" ]; then
+        repo_root="$srcdir/$pkgname"
+    else
+        repo_root="$srcdir"
+    fi
+
+    # Application binaries and components in /usr/lib/livesplit
+    install -dm755 "$pkgdir/usr/lib/livesplit"
+    cp -r "$repo_root/linux/dist/livesplit/"* "$pkgdir/usr/lib/livesplit/"
+
+    # Executable wrapper and CLI control tool in /usr/bin
+    install -dm755 "$pkgdir/usr/bin"
+    install -m755 "$srcdir/livesplit" "$pkgdir/usr/bin/livesplit"
+    install -m755 "$srcdir/livesplit-ctl" "$pkgdir/usr/bin/livesplit-ctl"
+
+    # Desktop entry
+    install -dm755 "$pkgdir/usr/share/applications"
+    install -m644 "$srcdir/livesplit.desktop" "$pkgdir/usr/share/applications/livesplit.desktop"
+
+    # MIME package definition (.lss and .lsl file types)
+    install -dm755 "$pkgdir/usr/share/mime/packages"
+    install -m644 "$srcdir/livesplit.xml" "$pkgdir/usr/share/mime/packages/livesplit.xml"
+
+    # Application icons
+    install -dm755 "$pkgdir/usr/share/icons/hicolor/scalable/apps"
+    install -m644 "$repo_root/res/Icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/livesplit.svg"
+
+    install -dm755 "$pkgdir/usr/share/icons/hicolor/256x256/apps"
+    install -m644 "$repo_root/res/Icon.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/livesplit.png"
+
+    # License
+    install -dm755 "$pkgdir/usr/share/licenses/$pkgname"
+    install -m644 "$repo_root/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

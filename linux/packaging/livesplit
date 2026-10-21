@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+# Detect .NET 10 runtime if DOTNET_ROOT is unset
+if [ -z "$DOTNET_ROOT" ]; then
+    if [ -d "/usr/share/dotnet/shared/Microsoft.NETCore.App" ] && ls /usr/share/dotnet/shared/Microsoft.NETCore.App/10.* >/dev/null 2>&1; then
+        export DOTNET_ROOT="/usr/share/dotnet"
+    elif [ -d "$HOME/.dotnet/shared/Microsoft.NETCore.App" ] && ls "$HOME/.dotnet/shared/Microsoft.NETCore.App"/10.* >/dev/null 2>&1; then
+        export DOTNET_ROOT="$HOME/.dotnet"
+        export PATH="$DOTNET_ROOT:$PATH"
+    elif [ -d "/usr/lib/dotnet" ]; then
+        export DOTNET_ROOT="/usr/lib/dotnet"
+    elif [ -d "/usr/share/dotnet" ]; then
+        export DOTNET_ROOT="/usr/share/dotnet"
+    fi
+fi
+
+exec /usr/lib/livesplit/LiveSplit "$@"

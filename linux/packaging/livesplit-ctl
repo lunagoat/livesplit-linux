@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""
+livesplit-ctl - CLI control tool for LiveSplit on Linux via Unix domain socket.
+"""
+
+import sys
+import os
+import socket
+import argparse
+
+def get_default_socket():
+    if "LIVESPLIT_SOCK" in os.environ:
+        return os.environ["LIVESPLIT_SOCK"]
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isdir(runtime_dir):
+        return os.path.join(runtime_dir, "livesplit.sock")
+    return "/tmp/livesplit.sock"
+
+QUERY_COMMANDS = {
+    "ping",
+    "autosplitteractivated",
+    "globalhotkeysenabled",
+}
+
+def is_query_command(cmd):
+    lower = cmd.lower()
+    return lower.startswith("get") or lower in QUERY_COMMANDS
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Control LiveSplit from the command line or desktop shortcuts (Hyprland, Sway, etc.)",
+        epilog="""Common commands:
+  startorsplit       Start timer or split
+  split              Split current segment
+  unsplit            Undo previous split
+  skipsplit          Skip current split
+  pause              Pause timer
+  resume             Resume timer
+  reset              Reset timer
+  ping               Check connection (returns 'pong')
+  gettimerphase      Get current phase (NotRunning, Running, Paused, Ended)
+  getcurrentrealtime Get current real time
+  getcurrentgametime Get current game time
+  getdelta           Get current delta
+
+Hyprland example (~/.config/hypr/hyprland.conf):
+  bind = , F4, exec, livesplit-ctl startorsplit
+  bind = , F5, exec, livesplit-ctl reset
+  bind = , F6, exec, livesplit-ctl skipsplit
+  bind = , F7, exec, livesplit-ctl unsplit
+  bind = , F8, exec, livesplit-ctl pause
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "-s", "--socket",
+        default=get_default_socket(),
+        help="Path to LiveSplit Unix domain socket (default: $XDG_RUNTIME_DIR/livesplit.sock)"
+    )
+    parser.add_argument(
+        "-t", "--timeout",
+        type=float,
+        default=2.0,
+        help="Socket timeout in seconds (default: 2.0)"
+    )
+    parser.add_argument(
+        "command",
+        nargs="+",
+        help="LiveSplit command (e.g. startorsplit, split, reset, pause, gettimerphase)"
+    )
+
+    args = parser.parse_args()
+    full_cmd = " ".join(args.command).strip()
+    if not full_cmd:
+        parser.print_help()
+        sys.exit(1)
+
+    sock_path = args.socket
+    if not os.path.exists(sock_path):
+        sys.stderr.write(f"Error: LiveSplit socket not found at '{sock_path}'. Is LiveSplit running?\n")
+        sys.exit(1)
+
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(args.timeout)
+
+    try:
+        s.connect(sock_path)
+    except Exception as e:
+        sys.stderr.write(f"Error connecting to LiveSplit at '{sock_path}': {e}\n")
+        sys.exit(1)
+
+    try:
+        s.sendall(f"{full_cmd}\n".encode("utf-8"))
+        if is_query_command(full_cmd):
+            buf = bytearray()
+            while True:
+                chunk = s.recv(1024)
+                if not chunk:
+                    break
+                buf.extend(chunk)
+                if b"\n" in chunk:
+                    break
+            resp = buf.decode("utf-8", errors="replace").strip()
+            if resp:
+                print(resp)
+        else:
+            s.settimeout(0.05)
+            try:
+                resp = s.recv(1024).decode("utf-8", errors="replace").strip()
+                if resp:
+                    print(resp)
+            except (socket.timeout, BlockingIOError):
+                pass
+    except Exception as e:
+        sys.stderr.write(f"Error communicating with LiveSplit: {e}\n")
+        sys.exit(1)
+    finally:
+        s.close()
+
+if __name__ == "__main__":
+    main()
