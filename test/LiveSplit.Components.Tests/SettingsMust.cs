@@ -194,19 +194,16 @@ public class SettingsMust
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
-<<<<<<< HEAD
         [typeof(SplitsSettings)],
         [typeof(DeltaSettings)],
         [typeof(ComparisonTimeSettings)],
         [typeof(CurrentComparisonSettings)],
         [typeof(PreviousSegmentSettings)],
         [typeof(PossibleTimeSaveSettings)],
-=======
         [typeof(SumOfBestSettings)],
         [typeof(RunPredictionSettings)],
         [typeof(TotalPlaytimeSettings)],
         [typeof(WorldRecordSettings)],
->>>>>>> worktree-agent-a79faf2a67f9662d2
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>

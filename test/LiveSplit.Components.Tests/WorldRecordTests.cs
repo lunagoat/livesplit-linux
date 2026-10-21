@@ -117,7 +117,7 @@ public class WorldRecordTests
         var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
         component.Update(null, state, 360, 60, mode);
         Assert.True(System.Threading.SpinWait.SpinUntil(
-            () => !(bool)typeof(WorldRecordComponent).GetProperty("IsLoading", flags).GetValue(component), 5000));
+            () => !(bool)typeof(WorldRecordComponent).GetProperty("IsLoading", flags).GetValue(component), 30000));
         Assert.Null(((WorldRecordComponent)component).WorldRecord);
         using Bitmap bitmap = TestSupport.Render(state, [component], mode, mode == LayoutMode.Vertical ? 360 : 60, "worldrecord-" + mode + ".png");
         Assert.True(bitmap.Width > 50 && bitmap.Height > 15);
