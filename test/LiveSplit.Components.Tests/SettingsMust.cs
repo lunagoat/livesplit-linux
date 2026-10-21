@@ -194,6 +194,16 @@ public class SettingsMust
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
+        [typeof(SplitsSettings)],
+        [typeof(DeltaSettings)],
+        [typeof(ComparisonTimeSettings)],
+        [typeof(CurrentComparisonSettings)],
+        [typeof(PreviousSegmentSettings)],
+        [typeof(PossibleTimeSaveSettings)],
+        [typeof(SumOfBestSettings)],
+        [typeof(RunPredictionSettings)],
+        [typeof(TotalPlaytimeSettings)],
+        [typeof(WorldRecordSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>
@@ -201,7 +211,7 @@ public class SettingsMust
     [MemberData(nameof(SettingsTypes))]
     public void RaisePropertyChangedForEverySettableProperty(Type type)
     {
-        var settings = (SettingsBase)Activator.CreateInstance(type);
+        var settings = type == typeof(SplitsSettings) ? new SplitsSettings(TestSupport.CreateState()) : (SettingsBase)Activator.CreateInstance(type);
         var raised = new List<string>();
         settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
@@ -211,6 +221,8 @@ public class SettingsMust
             {
                 continue; // set by the component, not a user setting
             }
+
+            SplitsTests.PreparePropertyChange(settings, property.Name);
 
             raised.Clear();
             object current = property.GetValue(settings);
@@ -227,7 +239,7 @@ public class SettingsMust
     private static object Different(System.Reflection.PropertyInfo property, object current)
     {
         Type t = property.PropertyType;
-        if (property.Name == "GradientString")
+        if (property.Name is "GradientString" or "SplitGradientString")
         {
             return (string)current == "Vertical" ? "Horizontal" : "Vertical";
         }

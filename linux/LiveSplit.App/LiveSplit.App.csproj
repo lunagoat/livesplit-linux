@@ -7,6 +7,9 @@
     <AssemblyName>LiveSplit</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <NoWarn>$(NoWarn);CA1416;CS0618;NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,5 +17,45 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(SrcPath)/LiveSplit.Core/LiveSplit.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Components.
+
+    Every component that builds on net10.0 is listed here. Adding a component is one line: add its csproj as a
+    ComponentProject. The project is built before the app (it is not referenced as an assembly) and its output
+    (artifacts/build/Components, see components/Directory.Build.props) is copied into <app dir>/Components, where
+    LiveSplit.Services.ComponentCatalog finds it through Core's ComponentManager (assembly scan).
+
+    A plain ProjectReference to a component works as well: the app also scans its own directory for assemblies that
+    carry a [ComponentFactory] attribute (use that for statically linked components).
+  -->
+  <ItemGroup Label="Components">
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.BlankSpace/src/LiveSplit.BlankSpace/LiveSplit.BlankSpace.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Text/src/LiveSplit.Text/LiveSplit.Text.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Timer/src/LiveSplit.Timer/LiveSplit.Timer.csproj" />
+    <ComponentProject Include="$(ComponentsPath)/LiveSplit.Title/src/LiveSplit.Title/LiveSplit.Title.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="@(ComponentProject)" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(ResourcesPath)/Icon.png" Link="Resources/Icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="$(SrcPath)/LiveSplit.View/Resources/DefaultLayout.lsl" LogicalName="DefaultLayout.lsl" />
+    <AvaloniaResource Include="$(ResourcesPath)/Icon.png" Link="Assets/Icon.png" />
+    <Content Include="$(SrcPath)/LiveSplit.Core/Localization/Locales/*.json" Link="Localization/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopyComponentsToOutput" AfterTargets="Build" Condition="'@(ComponentProject)' != ''">
+    <ItemGroup>
+      <_BuiltComponentFile Include="$(ArtifactsPath)/build/Components/*.dll" Exclude="$(ArtifactsPath)/build/Components/LiveSplit.Core.dll;$(ArtifactsPath)/build/Components/LiveSplit.Drawing.dll;$(ArtifactsPath)/build/Components/SpeedrunComSharp.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_BuiltComponentFile)" DestinationFolder="$(OutDir)Components" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

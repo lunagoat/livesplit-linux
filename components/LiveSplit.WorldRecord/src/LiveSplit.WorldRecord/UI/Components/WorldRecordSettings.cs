@@ -1,45 +1,196 @@
 ﻿using LiveSplit.Model;
 using System;
 using System.Drawing;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class WorldRecordSettings : UserControl
+public class WorldRecordSettings : SettingsBase
 {
-    public Color TextColor { get; set; }
-    public bool OverrideTextColor { get; set; }
-    public Color TimeColor { get; set; }
-    public bool OverrideTimeColor { get; set; }
+    public static readonly string[] GradientOptions = ["Plain", "Vertical", "Horizontal"];
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    private LayoutMode mode;
+    private bool display2Rows;
+    private Color textColor;
+    private bool overrideTextColor;
+    private Color timeColor;
+    private bool overrideTimeColor;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private GradientType backgroundGradient;
+
+    public Color TextColor { get => textColor; set => SetField(ref textColor, value); }
+    public bool OverrideTextColor
+    {
+        get => overrideTextColor;
+        set
+        {
+            if (SetField(ref overrideTextColor, value))
+            {
+                OnPropertyChanged(nameof(IsTextColorEnabled));
+            }
+        }
+    }
+
+    public Color TimeColor { get => timeColor; set => SetField(ref timeColor, value); }
+    public bool OverrideTimeColor
+    {
+        get => overrideTimeColor;
+        set
+        {
+            if (SetField(ref overrideTimeColor, value))
+            {
+                OnPropertyChanged(nameof(IsTimeColorEnabled));
+            }
+        }
+    }
+
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public GradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
-    public LiveSplitState CurrentState { get; set; }
-    public bool Display2Rows { get; set; }
-    public bool CenteredText { get; set; }
+    private LiveSplitState currentState;
+    public LiveSplitState CurrentState { get => currentState; set => SetField(ref currentState, value); }
 
-    public bool FilterVariables { get; set; }
-    public bool FilterPlatform { get; set; }
-    public bool FilterRegion { get; set; }
-    public bool FilterSubcategories { get; set; }
+    private bool centeredText;
+    public bool CenteredText
+    {
+        get => centeredText;
+        set
+        {
+            if (SetField(ref centeredText, value))
+            {
+                OnPropertyChanged(nameof(CenteredTextShown));
+            }
+        }
+    }
 
-    public string TimingMethod { get; set; }
-    public WorldRecordPrecisionType WRPrecision { get; set; }
+    private bool filterVariables;
+    public bool FilterVariables { get => filterVariables; set => SetField(ref filterVariables, value); }
 
-    public LayoutMode Mode { get; set; }
+    private bool filterPlatform;
+    public bool FilterPlatform { get => filterPlatform; set => SetField(ref filterPlatform, value); }
+
+    private bool filterRegion;
+    public bool FilterRegion { get => filterRegion; set => SetField(ref filterRegion, value); }
+
+    private bool filterSubcategories;
+    public bool FilterSubcategories { get => filterSubcategories; set => SetField(ref filterSubcategories, value); }
+
+    private string timingMethod;
+    public string TimingMethod { get => timingMethod; set => SetField(ref timingMethod, value); }
+
+    private WorldRecordPrecisionType wRPrecision;
+    public WorldRecordPrecisionType WRPrecision { get => wRPrecision; set => SetField(ref wRPrecision, value); }
+
+    public static readonly string[] TimingMethodOptions = ["Default for Leaderboard", "Real Time", "Real Time Without Loads", "Game Time"];
+
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(IsDisplay2RowsEnabled));
+                OnPropertyChanged(nameof(Display2RowsShown));
+                OnPropertyChanged(nameof(IsCenteredTextEnabled));
+                OnPropertyChanged(nameof(CenteredTextShown));
+            }
+        }
+    }
+
+    public bool Display2Rows
+    {
+        get => display2Rows;
+        set
+        {
+            if (SetField(ref display2Rows, value))
+            {
+                OnPropertyChanged(nameof(Display2RowsShown));
+                OnPropertyChanged(nameof(IsCenteredTextEnabled));
+                OnPropertyChanged(nameof(CenteredTextShown));
+            }
+        }
+    }
+
+    /// <summary>The first background swatch is hidden for a plain background.</summary>
+    public bool IsColor1Visible => BackgroundGradient != GradientType.Plain;
+
+    /// <summary>
+    /// What the second background swatch edits: <see cref="BackgroundColor2"/> when the first swatch is visible,
+    /// otherwise (plain background) <see cref="BackgroundColor"/>.
+    /// </summary>
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
+    }
+
+    public bool IsTextColorEnabled => OverrideTextColor;
+    public bool IsTimeColorEnabled => OverrideTimeColor;
+
+    /// <summary>"Display 2 Rows" is only configurable in vertical layouts; horizontal layouts always use two rows.</summary>
+    public bool IsDisplay2RowsEnabled => Mode != LayoutMode.Horizontal;
+
+    /// <summary>The state the "Display 2 Rows" checkbox displays (always checked in horizontal layouts).</summary>
+    public bool Display2RowsShown => Mode == LayoutMode.Horizontal || Display2Rows;
+
+    public bool IsCenteredTextEnabled => !Display2RowsShown;
+    public bool CenteredTextShown => IsCenteredTextEnabled && CenteredText;
 
     public WorldRecordSettings()
     {
-        InitializeComponent();
-
         TextColor = Color.FromArgb(255, 255, 255);
         OverrideTextColor = false;
         TimeColor = Color.FromArgb(255, 255, 255);
@@ -56,60 +207,6 @@ public partial class WorldRecordSettings : UserControl
         TimingMethod = "Default for Leaderboard";
         WRPrecision = WorldRecordPrecisionType.FromLeaderboard;
 
-        chkOverrideTextColor.DataBindings.Add("Checked", this, "OverrideTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTextColor.DataBindings.Add("BackColor", this, "TextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTimeColor.DataBindings.Add("Checked", this, "OverrideTimeColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTimeColor.DataBindings.Add("BackColor", this, "TimeColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkRegion.DataBindings.Add("Checked", this, "FilterRegion", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkPlatform.DataBindings.Add("Checked", this, "FilterPlatform", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkVariables.DataBindings.Add("Checked", this, "FilterVariables", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkSubcategories.DataBindings.Add("Checked", this, "FilterSubcategories", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbTimingMethod.DataBindings.Add("SelectedItem", this, "TimingMethod", false, DataSourceUpdateMode.OnPropertyChanged);
-    }
-
-    private void chkOverrideTimeColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label2.Enabled = btnTimeColor.Enabled = chkOverrideTimeColor.Checked;
-    }
-
-    private void chkOverrideTextColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label1.Enabled = btnTextColor.Enabled = chkOverrideTextColor.Checked;
-    }
-
-    private void WorldRecordSettings_Load(object sender, EventArgs e)
-    {
-        chkOverrideTextColor_CheckedChanged(null, null);
-        chkOverrideTimeColor_CheckedChanged(null, null);
-        if (Mode == LayoutMode.Horizontal)
-        {
-            chkTwoRows.Enabled = false;
-            chkTwoRows.DataBindings.Clear();
-            chkTwoRows.Checked = true;
-        }
-        else
-        {
-            chkTwoRows.Enabled = true;
-            chkTwoRows.DataBindings.Clear();
-            chkTwoRows.DataBindings.Add("Checked", this, "Display2Rows", false, DataSourceUpdateMode.OnPropertyChanged);
-        }
-
-        chkTwoRows_CheckedChanged(null, null);
-
-        rdoPrecByLeaderboard.Checked = WRPrecision == WorldRecordPrecisionType.FromLeaderboard;
-        rdoPrecSeconds.Checked = WRPrecision == WorldRecordPrecisionType.Seconds;
-        rdoPrecMillis.Checked = WRPrecision == WorldRecordPrecisionType.Milliseconds;
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnColor1.Visible = cmbGradientType.SelectedItem.ToString() != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
     }
 
     public void SetSettings(XmlNode node)
@@ -164,45 +261,4 @@ public partial class WorldRecordSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "PrecisionType", WRPrecision);
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
-
-    private void chkTwoRows_CheckedChanged(object sender, EventArgs e)
-    {
-        if (chkTwoRows.Checked)
-        {
-            chkCenteredText.Enabled = false;
-            chkCenteredText.DataBindings.Clear();
-            chkCenteredText.Checked = false;
-        }
-        else
-        {
-            chkCenteredText.Enabled = true;
-            chkCenteredText.DataBindings.Clear();
-            chkCenteredText.DataBindings.Add("Checked", this, "CenteredText", false, DataSourceUpdateMode.OnPropertyChanged);
-        }
-    }
-
-    private void cmbTimingMethod_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        TimingMethod = cmbTimingMethod.SelectedItem.ToString();
-    }
-
-    private void rdoPrecision_CheckedChanged(object sender, EventArgs e)
-    {
-        if (rdoPrecByLeaderboard.Checked)
-        {
-            WRPrecision = WorldRecordPrecisionType.FromLeaderboard;
-        }
-        else if (rdoPrecSeconds.Checked)
-        {
-            WRPrecision = WorldRecordPrecisionType.Seconds;
-        }
-        else if (rdoPrecMillis.Checked)
-        {
-            WRPrecision = WorldRecordPrecisionType.Milliseconds;
-        }
-    }
 }
