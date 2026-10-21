@@ -1,6 +1,7 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -18,169 +19,144 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using Xunit;
 
 namespace LiveSplit.AppTests;
 
 public class DialogsRenderMust
 {
-    [Fact]
+    [AvaloniaFact]
     public void RenderAllDialogsHeadlessly()
     {
-        Exception failure = null;
-        var thread = new Thread(() =>
+        ComponentCatalog.Initialize();
+
+        using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Samples", "Celeste - Any% (1.2.1.5).lss"));
+        IRun run = new StandardFormatsRunFactory(stream).Create(new StandardComparisonGeneratorsFactory());
+        var state = new LiveSplitState(run, null, null, null, new Settings { ActiveAutoSplitters = [], ComparisonGeneratorStates = new Dictionary<string, bool>() });
+
+        var layout = new Layout { Settings = new StandardLayoutSettingsFactory().Create() };
+        var timerComp = ComponentManager.LoadLayoutComponent("LiveSplit.Timer.dll", state);
+        if (timerComp != null) layout.LayoutComponents.Add(timerComp);
+        var splitsComp = ComponentManager.LoadLayoutComponent("LiveSplit.Splits.dll", state);
+        if (splitsComp != null) layout.LayoutComponents.Add(splitsComp);
+        if (layout.LayoutComponents.Count == 0)
+            layout.LayoutComponents.Add(new LayoutComponent("", new SeparatorComponent()));
+
+        // =========================================================
+        // 1. LayoutEditorDialog (Vertical & Horizontal)
+        // =========================================================
+        var editorDialog = new LayoutEditorDialog(new LayoutEditorRequest
         {
-            try
-            {
-                if (Application.Current == null)
-                {
-                    AppBuilder.Configure<RenderApp>()
-                        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                        .UseSkia()
-                        .SetupWithoutStarting();
-                }
-                Application.Current.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
-
-                ComponentCatalog.Initialize();
-
-                using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Samples", "Celeste - Any% (1.2.1.5).lss"));
-                IRun run = new StandardFormatsRunFactory(stream).Create(new StandardComparisonGeneratorsFactory());
-                var state = new LiveSplitState(run, null, null, null, new Settings { ActiveAutoSplitters = [], ComparisonGeneratorStates = new Dictionary<string, bool>() });
-
-                var layout = new Layout { Settings = new StandardLayoutSettingsFactory().Create() };
-                var timerComp = ComponentManager.LoadLayoutComponent("LiveSplit.Timer.dll", state);
-                if (timerComp != null) layout.LayoutComponents.Add(timerComp);
-                var splitsComp = ComponentManager.LoadLayoutComponent("LiveSplit.Splits.dll", state);
-                if (splitsComp != null) layout.LayoutComponents.Add(splitsComp);
-                if (layout.LayoutComponents.Count == 0)
-                    layout.LayoutComponents.Add(new LayoutComponent("", new SeparatorComponent()));
-
-                // =========================================================
-                // 1. LayoutEditorDialog (Vertical & Horizontal)
-                // =========================================================
-                var editorDialog = new LayoutEditorDialog(new LayoutEditorRequest
-                {
-                    Layout = layout,
-                    State = state
-                });
-                editorDialog.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(editorDialog, "layout-editor");
-
-                // Toggle Horizontal
-                var rbHorizontal = editorDialog.GetVisualDescendants().OfType<RadioButton>().FirstOrDefault(r => r.Content as string == "Horizontal");
-                if (rbHorizontal != null)
-                {
-                    rbHorizontal.IsChecked = true;
-                    Dispatcher.UIThread.RunJobs();
-                    Capture(editorDialog, "layout-editor-horizontal");
-                }
-                editorDialog.Close();
-                Dispatcher.UIThread.RunJobs();
-
-                // =========================================================
-                // 2. LayoutSettingsDialog (Layout & Component tab)
-                // =========================================================
-                var layoutSettingsDlg = new LayoutSettingsDialog(layout.Settings, layout);
-                layoutSettingsDlg.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(layoutSettingsDlg, "layout-settings-general");
-
-                var layoutTabs = layoutSettingsDlg.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
-                if (layoutTabs != null && layoutTabs.ItemCount > 1)
-                {
-                    layoutTabs.SelectedIndex = 1;
-                    Dispatcher.UIThread.RunJobs();
-                    Capture(layoutSettingsDlg, "layout-settings-component");
-                }
-                layoutSettingsDlg.Close();
-                Dispatcher.UIThread.RunJobs();
-
-                // =========================================================
-                // 3. SettingsDialog (Hotkeys, Comparisons, Racing)
-                // =========================================================
-                var settings = new Settings
-                {
-                    ActiveAutoSplitters = [],
-                    ComparisonGeneratorStates = new Dictionary<string, bool>()
-                };
-
-                var settingsDialog = new SettingsDialog(new SettingsDialogRequest
-                {
-                    Settings = settings,
-                    CurrentHotkeyProfile = "Default"
-                });
-                settingsDialog.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(settingsDialog, "settings-hotkeys");
-
-                var settingsTabs = settingsDialog.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
-                if (settingsTabs != null && settingsTabs.ItemCount > 2)
-                {
-                    settingsTabs.SelectedIndex = 1;
-                    Dispatcher.UIThread.RunJobs();
-                    Capture(settingsDialog, "settings-comparisons");
-
-                    settingsTabs.SelectedIndex = 2;
-                    Dispatcher.UIThread.RunJobs();
-                    Capture(settingsDialog, "settings-racing");
-                }
-                settingsDialog.Close();
-                Dispatcher.UIThread.RunJobs();
-
-                // =========================================================
-                // 4. RaceProviderManagingDialog
-                // =========================================================
-                var raceDialog = new RaceProviderManagingDialog(settings.RaceProvider);
-                raceDialog.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(raceDialog, "race-providers");
-                raceDialog.Close();
-                Dispatcher.UIThread.RunJobs();
-
-                // =========================================================
-                // 5. ShareRunDialog (Twitter & Speedrun.com)
-                // =========================================================
-                var shareDialog = new ShareRunDialog(new ShareDialogRequest
-                {
-                    State = state,
-                    Settings = state.Settings,
-                    MakeScreenShot = () => new System.Drawing.Bitmap(100, 100)
-                });
-                shareDialog.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(shareDialog, "share-twitter");
-
-                var combo = shareDialog.GetVisualDescendants().OfType<ComboBox>().FirstOrDefault();
-                if (combo != null && combo.Items.Cast<object>().Any(i => i.ToString() == "Speedrun.com"))
-                {
-                    combo.SelectedItem = "Speedrun.com";
-                    Dispatcher.UIThread.RunJobs();
-                    Capture(shareDialog, "share-speedruncom");
-                }
-                shareDialog.Close();
-                Dispatcher.UIThread.RunJobs();
-
-                // =========================================================
-                // 6. SpeedrunComSubmitDialog
-                // =========================================================
-                var submitDialog = new SpeedrunComSubmitDialog(run.Metadata);
-                submitDialog.Show();
-                Dispatcher.UIThread.RunJobs();
-                Capture(submitDialog, "speedruncom-submit");
-                submitDialog.Close();
-                Dispatcher.UIThread.RunJobs();
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
+            Layout = layout,
+            State = state
         });
+        editorDialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(editorDialog, "layout-editor");
 
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(60)), "Headless rendering timed out.");
-        Assert.Null(failure);
+        // Toggle Horizontal
+        var rbHorizontal = editorDialog.GetVisualDescendants().OfType<RadioButton>().FirstOrDefault(r => r.Content as string == "Horizontal");
+        if (rbHorizontal != null)
+        {
+            rbHorizontal.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Capture(editorDialog, "layout-editor-horizontal");
+        }
+        editorDialog.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // =========================================================
+        // 2. LayoutSettingsDialog (Layout & Component tab)
+        // =========================================================
+        var layoutSettingsDlg = new LayoutSettingsDialog(layout.Settings, layout);
+        layoutSettingsDlg.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(layoutSettingsDlg, "layout-settings-general");
+
+        var layoutTabs = layoutSettingsDlg.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
+        if (layoutTabs != null && layoutTabs.ItemCount > 1)
+        {
+            layoutTabs.SelectedIndex = 1;
+            Dispatcher.UIThread.RunJobs();
+            Capture(layoutSettingsDlg, "layout-settings-component");
+        }
+        layoutSettingsDlg.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // =========================================================
+        // 3. SettingsDialog (Hotkeys, Comparisons, Racing)
+        // =========================================================
+        var settings = new Settings
+        {
+            ActiveAutoSplitters = [],
+            ComparisonGeneratorStates = new Dictionary<string, bool>()
+        };
+
+        var settingsDialog = new SettingsDialog(new SettingsDialogRequest
+        {
+            Settings = settings,
+            CurrentHotkeyProfile = "Default"
+        });
+        settingsDialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(settingsDialog, "settings-hotkeys");
+
+        var settingsTabs = settingsDialog.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
+        if (settingsTabs != null && settingsTabs.ItemCount > 2)
+        {
+            settingsTabs.SelectedIndex = 1;
+            Dispatcher.UIThread.RunJobs();
+            Capture(settingsDialog, "settings-comparisons");
+
+            settingsTabs.SelectedIndex = 2;
+            Dispatcher.UIThread.RunJobs();
+            Capture(settingsDialog, "settings-racing");
+        }
+        settingsDialog.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // =========================================================
+        // 4. RaceProviderManagingDialog
+        // =========================================================
+        var raceDialog = new RaceProviderManagingDialog(settings.RaceProvider);
+        raceDialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(raceDialog, "race-providers");
+        raceDialog.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // =========================================================
+        // 5. ShareRunDialog (Twitter & Speedrun.com)
+        // =========================================================
+        var shareDialog = new ShareRunDialog(new ShareDialogRequest
+        {
+            State = state,
+            Settings = state.Settings,
+            MakeScreenShot = () => new System.Drawing.Bitmap(100, 100)
+        });
+        shareDialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(shareDialog, "share-twitter");
+
+        var combo = shareDialog.GetVisualDescendants().OfType<ComboBox>().FirstOrDefault();
+        if (combo != null && combo.Items.Cast<object>().Any(i => i.ToString() == "Speedrun.com"))
+        {
+            combo.SelectedItem = "Speedrun.com";
+            Dispatcher.UIThread.RunJobs();
+            Capture(shareDialog, "share-speedruncom");
+        }
+        shareDialog.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        // =========================================================
+        // 6. SpeedrunComSubmitDialog
+        // =========================================================
+        var submitDialog = new SpeedrunComSubmitDialog(run.Metadata);
+        submitDialog.Show();
+        Dispatcher.UIThread.RunJobs();
+        Capture(submitDialog, "speedruncom-submit");
+        submitDialog.Close();
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void Capture(Window window, string name)

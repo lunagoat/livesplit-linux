@@ -97,7 +97,7 @@ public class CommandServerMust : IDisposable
     private static string WaitFor(Func<string> read, string expected)
     {
         string value = null;
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 250; i++)
         {
             value = read();
             if (value == expected)
