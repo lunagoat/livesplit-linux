@@ -17,4 +17,8 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <None Include="Samples/*.lss" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopyComponents" AfterTargets="Build">
+    <ItemGroup><ComponentDll Include="$(ArtifactsPath)/build/Components/*.dll" /></ItemGroup>
+    <Copy SourceFiles="@(ComponentDll)" DestinationFolder="$(OutDir)Components" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

@@ -145,7 +145,7 @@ public sealed class ComponentSettingsViewFactory<TSettings> : IComponentSettings
 
 public static class ComponentSettingsViews
 {
-    private static readonly List<IComponentSettingsViewFactory> Factories = [];
+    private static readonly List<IComponentSettingsViewFactory> Factories = [View.ComponentSettings.Registry.Default];
 
     public static void Register(IComponentSettingsViewFactory factory)
     {
@@ -171,6 +171,11 @@ public static class ComponentSettingsViews
     /// </summary>
     public static Avalonia.Controls.Control Create(UI.Components.IComponent component, LayoutMode mode)
     {
+        if (component == null)
+        {
+            return Create((object)null, mode);
+        }
+
         object settings = component.GetSettingsControl(mode);
         return Create(settings, mode);
     }
@@ -233,8 +238,10 @@ public sealed class DefaultLayoutEditorLauncher : ILayoutEditorLauncher
 {
     public LayoutEditorResult ShowLayoutEditor(LayoutEditorRequest request)
     {
-        NotImplementedDialog.Show(request.Host, "The layout editor");
-        return new LayoutEditorResult { Result = DialogResult.OK };
+        return new LayoutEditorResult
+        {
+            Result = UiThread.RunSync(() => new View.Dialogs.LayoutComponentSettingsWindow(request).ShowModalAsync(request.Host)),
+        };
     }
 }
 
