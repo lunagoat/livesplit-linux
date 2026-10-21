@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace LiveSplit.UI.Components;
 
@@ -361,6 +360,7 @@ public class SplitsComponent : IComponent
     public object GetSettingsControl(LayoutMode mode)
     {
         Settings.Mode = mode;
+        Settings.PrepareForDisplay();
         return Settings;
     }
 
