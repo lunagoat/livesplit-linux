@@ -272,6 +272,8 @@ public class LegacyComponentLoaderMust
                 stage = "factory";
                 var factory = (IComponentFactory)Activator.CreateInstance(attr.ComponentFactoryClassType);
                 var run = new Run(new StandardComparisonGeneratorsFactory());
+                run.GameName = "Test Game";
+                run.CategoryName = "Any%";
                 run.Add(new Segment("Split"));
                 var state = new LiveSplitState(run, null, new Layout(), new LayoutSettings(), new StandardSettingsFactory().Create());
                 stage = "create";
