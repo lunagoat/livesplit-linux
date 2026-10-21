@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/linux/">
     <Project Path="LiveSplit.App/LiveSplit.App.csproj" />
+    <Project Path="LiveSplit.App.Tests/LiveSplit.App.Tests.csproj" />
     <Project Path="LiveSplit.Drawing/LiveSplit.Drawing.csproj" />
     <Project Path="LiveSplit.Drawing.Tests/LiveSplit.Drawing.Tests.csproj" />
   </Folder>
