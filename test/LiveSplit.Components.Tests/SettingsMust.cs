@@ -194,6 +194,10 @@ public class SettingsMust
         [typeof(TitleSettings)],
         [typeof(TextComponentSettings)],
         [typeof(BlankSpaceSettings)],
+        [typeof(SumOfBestSettings)],
+        [typeof(RunPredictionSettings)],
+        [typeof(TotalPlaytimeSettings)],
+        [typeof(WorldRecordSettings)],
     ];
 
     /// <summary>Every settable property must raise PropertyChanged with its own name, so Avalonia two-way bindings work.</summary>

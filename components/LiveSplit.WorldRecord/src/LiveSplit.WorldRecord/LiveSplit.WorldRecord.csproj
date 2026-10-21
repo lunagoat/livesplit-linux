@@ -1,20 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net4.8.1</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-
-    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>LiveSplit</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <NoWarn>$(NoWarn);CA1416;CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(LsLibPath)/SpeedrunComSharp/src/SpeedrunComSharp/SpeedrunComSharp.csproj" Private="false" ExcludeAssets="runtime" />
     <ProjectReference Include="$(LsSrcPath)/LiveSplit.Core/LiveSplit.Core.csproj" Private="false" ExcludeAssets="runtime" />
-    <ProjectReference Include="$(LsSrcPath)/UpdateManager/UpdateManager.csproj" Private="false" ExcludeAssets="runtime" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="PolySharp" Version="1.16.0" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

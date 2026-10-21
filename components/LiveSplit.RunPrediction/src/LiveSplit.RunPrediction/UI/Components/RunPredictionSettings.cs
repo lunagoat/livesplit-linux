@@ -4,38 +4,187 @@ using LiveSplit.TimeFormatters;
 using System;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 using System.Xml;
 
 namespace LiveSplit.UI.Components;
 
-public partial class RunPredictionSettings : UserControl
+public class RunPredictionSettings : SettingsBase
 {
-    public Color TextColor { get; set; }
-    public bool OverrideTextColor { get; set; }
-    public Color TimeColor { get; set; }
-    public bool OverrideTimeColor { get; set; }
-    public TimeAccuracy Accuracy { get; set; }
+    public static readonly string[] GradientOptions = ["Plain", "Vertical", "Horizontal"];
 
-    public Color BackgroundColor { get; set; }
-    public Color BackgroundColor2 { get; set; }
-    public GradientType BackgroundGradient { get; set; }
+    private LayoutMode mode;
+    private bool display2Rows;
+    private Color textColor;
+    private bool overrideTextColor;
+    private Color timeColor;
+    private bool overrideTimeColor;
+    private Color backgroundColor;
+    private Color backgroundColor2;
+    private GradientType backgroundGradient;
+
+    public Color TextColor { get => textColor; set => SetField(ref textColor, value); }
+    public bool OverrideTextColor
+    {
+        get => overrideTextColor;
+        set
+        {
+            if (SetField(ref overrideTextColor, value))
+            {
+                OnPropertyChanged(nameof(IsTextColorEnabled));
+            }
+        }
+    }
+
+    public Color TimeColor { get => timeColor; set => SetField(ref timeColor, value); }
+    public bool OverrideTimeColor
+    {
+        get => overrideTimeColor;
+        set
+        {
+            if (SetField(ref overrideTimeColor, value))
+            {
+                OnPropertyChanged(nameof(IsTimeColorEnabled));
+            }
+        }
+    }
+
+    public Color BackgroundColor
+    {
+        get => backgroundColor;
+        set
+        {
+            if (SetField(ref backgroundColor, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public Color BackgroundColor2
+    {
+        get => backgroundColor2;
+        set
+        {
+            if (SetField(ref backgroundColor2, value))
+            {
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
+    public GradientType BackgroundGradient
+    {
+        get => backgroundGradient;
+        set
+        {
+            if (SetField(ref backgroundGradient, value))
+            {
+                OnPropertyChanged(nameof(GradientString));
+                OnPropertyChanged(nameof(IsColor1Visible));
+                OnPropertyChanged(nameof(BackgroundSwatch2Color));
+            }
+        }
+    }
+
     public string GradientString
     {
         get => BackgroundGradient.ToString();
         set => BackgroundGradient = (GradientType)Enum.Parse(typeof(GradientType), value);
     }
 
-    public string Comparison { get; set; }
-    public LiveSplitState CurrentState { get; set; }
-    public bool Display2Rows { get; set; }
+    private TimeAccuracy accuracy;
+    public TimeAccuracy Accuracy { get => accuracy; set => SetField(ref accuracy, value); }
 
-    public LayoutMode Mode { get; set; }
+    private string comparison;
+    public string Comparison
+    {
+        get => comparison;
+        set
+        {
+            if (SetField(ref comparison, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+
+    private LiveSplitState currentState;
+    public LiveSplitState CurrentState
+    {
+        get => currentState;
+        set
+        {
+            if (SetField(ref currentState, value))
+            {
+                OnPropertyChanged(nameof(ComparisonOptions));
+            }
+        }
+    }
+
+    public LayoutMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (SetField(ref mode, value))
+            {
+                OnPropertyChanged(nameof(IsDisplay2RowsEnabled));
+                OnPropertyChanged(nameof(Display2RowsShown));
+            }
+        }
+    }
+
+    public bool Display2Rows
+    {
+        get => display2Rows;
+        set
+        {
+            if (SetField(ref display2Rows, value))
+            {
+                OnPropertyChanged(nameof(Display2RowsShown));
+            }
+        }
+    }
+
+    /// <summary>The first background swatch is hidden for a plain background.</summary>
+    public bool IsColor1Visible => BackgroundGradient != GradientType.Plain;
+
+    /// <summary>
+    /// What the second background swatch edits: <see cref="BackgroundColor2"/> when the first swatch is visible,
+    /// otherwise (plain background) <see cref="BackgroundColor"/>.
+    /// </summary>
+    public Color BackgroundSwatch2Color
+    {
+        get => IsColor1Visible ? BackgroundColor2 : BackgroundColor;
+        set
+        {
+            if (IsColor1Visible)
+            {
+                BackgroundColor2 = value;
+            }
+            else
+            {
+                BackgroundColor = value;
+            }
+        }
+    }
+
+    public bool IsTextColorEnabled => OverrideTextColor;
+    public bool IsTimeColorEnabled => OverrideTimeColor;
+
+    /// <summary>"Display 2 Rows" is only configurable in vertical layouts; horizontal layouts always use two rows.</summary>
+    public bool IsDisplay2RowsEnabled => Mode != LayoutMode.Horizontal;
+
+    /// <summary>The state the "Display 2 Rows" checkbox displays (always checked in horizontal layouts).</summary>
+    public bool Display2RowsShown => Mode == LayoutMode.Horizontal || Display2Rows;
+
+    // Read on opening the settings view, so changes to the run's comparisons are reflected.
+    public string[] ComparisonOptions => ["Current Comparison", .. (CurrentState?.Run.Comparisons ?? [])
+        .Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName),
+        .. (Comparison != "Current Comparison" && !(CurrentState?.Run.Comparisons.Contains(Comparison) ?? false) ? new[] { Comparison } : Array.Empty<string>())];
 
     public RunPredictionSettings()
     {
-        InitializeComponent();
-
         TextColor = Color.FromArgb(255, 255, 255);
         OverrideTextColor = false;
         TimeColor = Color.FromArgb(255, 255, 255);
@@ -47,99 +196,6 @@ public partial class RunPredictionSettings : UserControl
         Comparison = "Current Comparison";
         Display2Rows = false;
 
-        chkOverrideTextColor.DataBindings.Add("Checked", this, "OverrideTextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTextColor.DataBindings.Add("BackColor", this, "TextColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        chkOverrideTimeColor.DataBindings.Add("Checked", this, "OverrideTimeColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnTimeColor.DataBindings.Add("BackColor", this, "TimeColor", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        cmbGradientType.SelectedIndexChanged += cmbGradientType_SelectedIndexChanged;
-        cmbGradientType.DataBindings.Add("SelectedItem", this, "GradientString", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor1.DataBindings.Add("BackColor", this, "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        btnColor2.DataBindings.Add("BackColor", this, "BackgroundColor2", false, DataSourceUpdateMode.OnPropertyChanged);
-        cmbComparison.SelectedIndexChanged += cmbComparison_SelectedIndexChanged;
-        cmbComparison.DataBindings.Add("SelectedItem", this, "Comparison", false, DataSourceUpdateMode.OnPropertyChanged);
-
-        rdoSeconds.CheckedChanged += rdoSeconds_CheckedChanged;
-        rdoHundredths.CheckedChanged += rdoHundredths_CheckedChanged;
-
-        chkOverrideTextColor.CheckedChanged += chkOverrideTextColor_CheckedChanged;
-        chkOverrideTimeColor.CheckedChanged += chkOverrideTimeColor_CheckedChanged;
-    }
-
-    private void chkOverrideTimeColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label2.Enabled = btnTimeColor.Enabled = chkOverrideTimeColor.Checked;
-    }
-
-    private void chkOverrideTextColor_CheckedChanged(object sender, EventArgs e)
-    {
-        label1.Enabled = btnTextColor.Enabled = chkOverrideTextColor.Checked;
-    }
-
-    private void cmbComparison_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        Comparison = cmbComparison.SelectedItem.ToString();
-    }
-
-    private void RunPredictionSettings_Load(object sender, EventArgs e)
-    {
-        chkOverrideTextColor_CheckedChanged(null, null);
-        chkOverrideTimeColor_CheckedChanged(null, null);
-        cmbComparison.Items.Clear();
-        cmbComparison.Items.Add("Current Comparison");
-        cmbComparison.Items.AddRange(CurrentState.Run.Comparisons.Where(x => x is not BestSplitTimesComparisonGenerator.ComparisonName and not NoneComparisonGenerator.ComparisonName).ToArray());
-        if (!cmbComparison.Items.Contains(Comparison))
-        {
-            cmbComparison.Items.Add(Comparison);
-        }
-
-        rdoSeconds.Checked = Accuracy == TimeAccuracy.Seconds;
-        rdoTenths.Checked = Accuracy == TimeAccuracy.Tenths;
-        rdoHundredths.Checked = Accuracy == TimeAccuracy.Hundredths;
-        if (Mode == LayoutMode.Horizontal)
-        {
-            chkTwoRows.Enabled = false;
-            chkTwoRows.DataBindings.Clear();
-            chkTwoRows.Checked = true;
-        }
-        else
-        {
-            chkTwoRows.Enabled = true;
-            chkTwoRows.DataBindings.Clear();
-            chkTwoRows.DataBindings.Add("Checked", this, "Display2Rows", false, DataSourceUpdateMode.OnPropertyChanged);
-        }
-    }
-
-    private void cmbGradientType_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        btnColor1.Visible = cmbGradientType.SelectedItem.ToString() != "Plain";
-        btnColor2.DataBindings.Clear();
-        btnColor2.DataBindings.Add("BackColor", this, btnColor1.Visible ? "BackgroundColor2" : "BackgroundColor", false, DataSourceUpdateMode.OnPropertyChanged);
-        GradientString = cmbGradientType.SelectedItem.ToString();
-    }
-
-    private void rdoHundredths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void rdoTenths_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void rdoSeconds_CheckedChanged(object sender, EventArgs e)
-    {
-        UpdateAccuracy();
-    }
-
-    private void UpdateAccuracy()
-    {
-        Accuracy =
-            rdoSeconds.Checked ? TimeAccuracy.Seconds
-            : rdoTenths.Checked ? TimeAccuracy.Tenths
-            : rdoHundredths.Checked ? TimeAccuracy.Hundredths
-            : TimeAccuracy.Milliseconds;
     }
 
     public void SetSettings(XmlNode node)
@@ -184,8 +240,4 @@ public partial class RunPredictionSettings : UserControl
         SettingsHelper.CreateSetting(document, parent, "Display2Rows", Display2Rows);
     }
 
-    private void ColorButtonClick(object sender, EventArgs e)
-    {
-        SettingsHelper.ColorButtonClick((Button)sender, this);
-    }
 }
