@@ -51,7 +51,12 @@ public class AutoSplitter : ICloneable
                 switch (Type)
                 {
                     case AutoSplitterType.Component:
-                        Factory = ComponentManager.ComponentFactories[FileName];
+                        if (!ComponentManager.ComponentFactories.TryGetValue(FileName, out IComponentFactory componentFactory) || componentFactory == null)
+                        {
+                            throw new NotSupportedException("This auto splitter is a Windows-only .NET Framework component and can't run on Linux. Auto splitters written as .asl scripts or auto-splitting runtime modules do work.");
+                        }
+
+                        Factory = componentFactory;
                         Component = Factory.Create(state);
                         break;
                     case AutoSplitterType.Script:
@@ -124,7 +129,22 @@ public class AutoSplitter : ICloneable
         if (Type == AutoSplitterType.Component)
         {
             IComponentFactory factory = ComponentManager.LoadFactory<IComponentFactory>(LocalPath);
-            ComponentManager.ComponentFactories.Add(Path.GetFileName(LocalPath), factory);
+            if (factory != null)
+            {
+                ComponentManager.ComponentFactories[Path.GetFileName(LocalPath)] = factory;
+            }
+            else
+            {
+                // Not loadable here (e.g. a 32-bit .NET Framework DLL); don't keep it around.
+                try
+                {
+                    File.Delete(LocalPath);
+                }
+                catch (Exception)
+                {
+                    Log.Error($"Failed to delete unloadable component: {LocalPath}");
+                }
+            }
         }
     }
 
