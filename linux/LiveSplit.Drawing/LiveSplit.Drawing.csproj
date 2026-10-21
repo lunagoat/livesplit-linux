@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A SkiaSharp-backed re-implementation of the subset of System.Drawing.Common that LiveSplit uses,
+    defined in the real System.Drawing* namespaces so that existing drawing code compiles unchanged.
+    Deliberately does NOT reference System.Drawing.Common or WinForms.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>LiveSplit.Drawing</AssemblyName>
+    <RootNamespace>System.Drawing</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS0618;CA1416;CS8981</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
+    <PackageReference Include="System.Formats.Nrbf" Version="10.0.8" />
+  </ItemGroup>
+
+</Project>
