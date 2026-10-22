@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -178,6 +179,8 @@ public static class StubSupport
         {
             var prop = item.GetType().GetProperty("Name", BindingFlags.Public | BindingFlags.Instance);
             prop?.SetValue(item, key);
+            var fld = item.GetType().GetField("<Name>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            fld?.SetValue(item, key);
         }
         return item;
     }
@@ -634,6 +637,11 @@ public static class StubSupport
             }
             if (owner != null)
             {
+                if (child.GetType().Name == "TreeNode")
+                {
+                    SetTreeNodeHierarchy(child, owner);
+                    return;
+                }
                 var parentProp = child.GetType().GetProperty("Parent", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 parentProp?.SetValue(child, owner);
             }
@@ -645,10 +653,407 @@ public static class StubSupport
     {
         try
         {
+            if (child.GetType().Name == "TreeNode")
+            {
+                SetNodeParent(child, null);
+                SetNodeTreeView(child, null);
+                return;
+            }
             var parentProp = child.GetType().GetProperty("Parent", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             parentProp?.SetValue(child, null);
         }
         catch { }
+    }
+
+    private static void SetTreeNodeHierarchy(object child, object owner)
+    {
+        if (child == null || owner == null) return;
+        string ownerName = owner.GetType().Name;
+        if (ownerName == "TreeView")
+        {
+            SetNodeParent(child, null);
+            SetNodeTreeView(child, owner);
+        }
+        else if (ownerName == "TreeNode")
+        {
+            SetNodeParent(child, owner);
+            var tv = GetNodeTreeView(owner);
+            SetNodeTreeView(child, tv);
+        }
+    }
+
+    private static void SetNodeParent(object node, object parent)
+    {
+        if (node == null) return;
+        var parentField = node.GetType().GetField("<Parent>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        parentField?.SetValue(node, parent);
+    }
+
+    private static void SetNodeTreeView(object node, object treeView)
+    {
+        if (node == null) return;
+        var tvField = node.GetType().GetField("<TreeView>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        tvField?.SetValue(node, treeView);
+
+        // Recursively update all children in node.Nodes
+        var nodes = node.GetType().GetProperty("Nodes")?.GetValue(node);
+        if (nodes != null)
+        {
+            var list = GetCollectionList(nodes);
+            for (int i = 0; i < list.Count; i++)
+            {
+                var child = list[i];
+                if (child != null)
+                {
+                    SetNodeTreeView(child, treeView);
+                }
+            }
+        }
+    }
+
+    public static object TreeNodeGetTreeView(object node)
+    {
+        return GetNodeTreeView(node);
+    }
+
+    private static object GetNodeTreeView(object node)
+    {
+        if (node == null) return null;
+        var tvField = node.GetType().GetField("<TreeView>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var tv = tvField?.GetValue(node);
+        if (tv != null) return tv;
+
+        var cur = GetNodeParent(node);
+        while (cur != null)
+        {
+            tv = cur.GetType().GetField("<TreeView>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(cur);
+            if (tv != null) return tv;
+            cur = GetNodeParent(cur);
+        }
+        return null;
+    }
+
+    private static object GetNodeParent(object node)
+    {
+        if (node == null) return null;
+        var parentField = node.GetType().GetField("<Parent>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        return parentField?.GetValue(node);
+    }
+
+    public static int TreeNodeGetIndex(object node)
+    {
+        if (node == null) return 0;
+        var parent = GetNodeParent(node);
+        if (parent != null)
+        {
+            var nodes = parent.GetType().GetProperty("Nodes")?.GetValue(parent);
+            if (nodes != null)
+            {
+                int idx = GetCollectionList(nodes).IndexOf(node);
+                if (idx >= 0) return idx;
+            }
+        }
+        var tv = GetNodeTreeView(node);
+        if (tv != null)
+        {
+            var nodes = tv.GetType().GetProperty("Nodes")?.GetValue(tv);
+            if (nodes != null)
+            {
+                int idx = GetCollectionList(nodes).IndexOf(node);
+                if (idx >= 0) return idx;
+            }
+        }
+        return 0;
+    }
+
+    public static int TreeNodeGetLevel(object node)
+    {
+        if (node == null) return 0;
+        int level = 0;
+        var cur = GetNodeParent(node);
+        while (cur != null)
+        {
+            level++;
+            cur = GetNodeParent(cur);
+        }
+        return level;
+    }
+
+    public static string TreeNodeGetFullPath(object node)
+    {
+        if (node == null) return "";
+        var tv = GetNodeTreeView(node);
+        string sep = "\\";
+        if (tv != null)
+        {
+            var sepProp = tv.GetType().GetProperty("PathSeparator");
+            if (sepProp?.GetValue(tv) is string s && !string.IsNullOrEmpty(s))
+            {
+                sep = s;
+            }
+        }
+        var parts = new List<string>();
+        var cur = node;
+        while (cur != null)
+        {
+            var text = cur.GetType().GetProperty("Text")?.GetValue(cur) as string ?? "";
+            parts.Add(text);
+            cur = GetNodeParent(cur);
+        }
+        parts.Reverse();
+        return string.Join(sep, parts);
+    }
+
+    private static List<object> GetNodeSiblingList(object node)
+    {
+        if (node == null) return null;
+        var parent = GetNodeParent(node);
+        if (parent != null)
+        {
+            var nodes = parent.GetType().GetProperty("Nodes")?.GetValue(parent);
+            if (nodes != null) return GetCollectionList(nodes);
+        }
+        var tv = GetNodeTreeView(node);
+        if (tv != null)
+        {
+            var nodes = tv.GetType().GetProperty("Nodes")?.GetValue(tv);
+            if (nodes != null) return GetCollectionList(nodes);
+        }
+        return null;
+    }
+
+    public static object TreeNodeGetPrevNode(object node)
+    {
+        var list = GetNodeSiblingList(node);
+        if (list != null)
+        {
+            int idx = list.IndexOf(node);
+            if (idx > 0) return list[idx - 1];
+        }
+        return null;
+    }
+
+    public static object TreeNodeGetNextNode(object node)
+    {
+        var list = GetNodeSiblingList(node);
+        if (list != null)
+        {
+            int idx = list.IndexOf(node);
+            if (idx >= 0 && idx + 1 < list.Count) return list[idx + 1];
+        }
+        return null;
+    }
+
+    public static object TreeNodeGetFirstNode(object node)
+    {
+        if (node == null) return null;
+        var nodes = node.GetType().GetProperty("Nodes")?.GetValue(node);
+        if (nodes != null)
+        {
+            var list = GetCollectionList(nodes);
+            if (list.Count > 0) return list[0];
+        }
+        return null;
+    }
+
+    public static object TreeNodeGetLastNode(object node)
+    {
+        if (node == null) return null;
+        var nodes = node.GetType().GetProperty("Nodes")?.GetValue(node);
+        if (nodes != null)
+        {
+            var list = GetCollectionList(nodes);
+            if (list.Count > 0) return list[list.Count - 1];
+        }
+        return null;
+    }
+
+    public static object TreeNodeGetPrevVisibleNode(object node)
+    {
+        var prev = TreeNodeGetPrevNode(node);
+        if (prev != null) return prev;
+        return GetNodeParent(node);
+    }
+
+    public static object TreeNodeGetNextVisibleNode(object node)
+    {
+        if (node == null) return null;
+        bool isExpanded = (bool)(node.GetType().GetProperty("IsExpanded")?.GetValue(node) ?? false);
+        if (isExpanded)
+        {
+            var first = TreeNodeGetFirstNode(node);
+            if (first != null) return first;
+        }
+        var next = TreeNodeGetNextNode(node);
+        if (next != null) return next;
+        return null;
+    }
+
+    public static void TreeNodeExpand(object node)
+    {
+        if (node == null) return;
+        SetNodeBoolField(node, "IsExpanded", true);
+    }
+
+    public static void TreeNodeCollapse(object node)
+    {
+        if (node == null) return;
+        SetNodeBoolField(node, "IsExpanded", false);
+    }
+
+    public static void TreeNodeToggle(object node)
+    {
+        if (node == null) return;
+        bool cur = (bool)(node.GetType().GetProperty("IsExpanded")?.GetValue(node) ?? false);
+        SetNodeBoolField(node, "IsExpanded", !cur);
+    }
+
+    private static void SetNodeBoolField(object node, string propName, bool val)
+    {
+        try
+        {
+            var prop = node.GetType().GetProperty(propName);
+            if (prop?.CanWrite == true)
+            {
+                prop.SetValue(node, val);
+                return;
+            }
+            var fld = node.GetType().GetField($"<{propName}>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            fld?.SetValue(node, val);
+        }
+        catch { }
+    }
+
+    public static Rectangle TreeNodeGetBounds(object node, Rectangle currentBounds)
+    {
+        if (!currentBounds.IsEmpty && currentBounds.Width > 0 && currentBounds.Height > 0)
+        {
+            return currentBounds;
+        }
+        int index = TreeNodeGetIndex(node);
+        return new Rectangle(0, index * 18, 100, 18);
+    }
+
+    public static object TreeNodeCollectionFind(object collection, string key, bool searchAllChildren)
+    {
+        if (collection == null) return null;
+        var asm = collection.GetType().Assembly;
+        var tnType = asm.GetType("System.Windows.Forms.TreeNode");
+        if (tnType == null) return null;
+
+        var matches = new List<object>();
+        void Search(object col)
+        {
+            var list = GetCollectionList(col);
+            for (int i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                if (item == null) continue;
+                var name = item.GetType().GetProperty("Name")?.GetValue(item) as string;
+                if (string.Equals(name, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(item);
+                }
+                if (searchAllChildren)
+                {
+                    var children = item.GetType().GetProperty("Nodes")?.GetValue(item);
+                    if (children != null) Search(children);
+                }
+            }
+        }
+        Search(collection);
+        var arr = Array.CreateInstance(tnType, matches.Count);
+        for (int i = 0; i < matches.Count; i++) arr.SetValue(matches[i], i);
+        return arr;
+    }
+
+    public static void TreeViewSetSelectedNode(object treeView, object newSelectedNode)
+    {
+        if (treeView == null) return;
+        var tvType = treeView.GetType();
+        var cur = tvType.GetProperty("SelectedNode")?.GetValue(treeView);
+        if (ReferenceEquals(cur, newSelectedNode)) return;
+
+        var asm = tvType.Assembly;
+        var cancelArgsType = asm.GetType("System.Windows.Forms.TreeViewCancelEventArgs");
+        var eventArgsType = asm.GetType("System.Windows.Forms.TreeViewEventArgs");
+
+        var beforeSelect = tvType.GetField("<BeforeSelect>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(treeView) as MulticastDelegate;
+        if (beforeSelect != null && cancelArgsType != null)
+        {
+            object cancelArgs = null;
+            var tnType = asm.GetType("System.Windows.Forms.TreeNode");
+            var actionType = asm.GetType("System.Windows.Forms.TreeViewAction");
+            var ctor = actionType != null ? cancelArgsType.GetConstructor(new[] { tnType, typeof(bool), actionType }) : null;
+            if (ctor != null)
+            {
+                cancelArgs = ctor.Invoke(new object[] { newSelectedNode, false, 0 });
+            }
+            else
+            {
+                cancelArgs = Activator.CreateInstance(cancelArgsType);
+                cancelArgsType.GetProperty("Node")?.SetValue(cancelArgs, newSelectedNode);
+            }
+            FireEvent(beforeSelect, treeView, (EventArgs)cancelArgs, "BeforeSelect");
+            bool canceled = (bool)(cancelArgsType.GetProperty("Cancel")?.GetValue(cancelArgs) ?? false);
+            if (canceled) return;
+        }
+
+        var selField = tvType.GetField("<SelectedNode>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        selField?.SetValue(treeView, newSelectedNode);
+
+        var afterSelect = tvType.GetField("<AfterSelect>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(treeView) as MulticastDelegate;
+        if (afterSelect != null && eventArgsType != null)
+        {
+            object eventArgs = null;
+            var tnType = asm.GetType("System.Windows.Forms.TreeNode");
+            var actionType = asm.GetType("System.Windows.Forms.TreeViewAction");
+            var ctor = actionType != null ? eventArgsType.GetConstructor(new[] { tnType, actionType }) : null;
+            if (ctor == null) ctor = eventArgsType.GetConstructor(new[] { tnType });
+            if (ctor != null && ctor.GetParameters().Length == 2)
+            {
+                eventArgs = ctor.Invoke(new object[] { newSelectedNode, 0 });
+            }
+            else if (ctor != null && ctor.GetParameters().Length == 1)
+            {
+                eventArgs = ctor.Invoke(new object[] { newSelectedNode });
+            }
+            else
+            {
+                eventArgs = Activator.CreateInstance(eventArgsType);
+                eventArgsType.GetProperty("Node")?.SetValue(eventArgs, newSelectedNode);
+            }
+            FireEvent(afterSelect, treeView, (EventArgs)eventArgs, "AfterSelect");
+        }
+    }
+
+    public static object InitPrimaryScreen(object screen)
+    {
+        if (screen == null) return null;
+        try
+        {
+            var st = screen.GetType();
+            var rect = new Rectangle(0, 0, 1920, 1080);
+
+            void SetPropAndField(string name, object val)
+            {
+                var fld = st.GetField($"<{name}>k__BackingField", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                fld?.SetValue(screen, val);
+                var prop = st.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (prop != null && prop.CanWrite)
+                {
+                    prop.SetValue(screen, val);
+                }
+            }
+
+            SetPropAndField("Bounds", rect);
+            SetPropAndField("WorkingArea", rect);
+            SetPropAndField("Primary", true);
+            SetPropAndField("DeviceName", "DISPLAY1");
+            SetPropAndField("BitsPerPixel", 32);
+        }
+        catch { }
+        return screen;
     }
 
     // Equality check for property change detection
