@@ -17,6 +17,8 @@ pub type HANDLE = usize;
 thread_local! { static ERROR: Cell<u32> = const { Cell::new(0) }; }
 fn error(e: u32) {
     ERROR.with(|v| v.set(e));
+    // .NET's SetLastError=true reads errno after the call on Unix, not GetLastError(), so mirror the code there.
+    unsafe { *libc::__errno_location() = e as i32 };
 }
 /// Opt-in diagnostics: set LIVESPLIT_SHIM_TRACE=1 to log API calls to stderr. Identical consecutive
 /// messages are collapsed into a repeat count so a polling loop cannot flood the log.

@@ -274,3 +274,27 @@ fn clocks_system_info_stubs_and_tls() {
         assert_eq!(GetLastError(), 50);
     }
 }
+
+#[test]
+fn virtual_query_past_user_space_ends_scan_with_errno_87() {
+    unsafe {
+        let c = child();
+        let h = OpenProcess(0x1fffff, 0, c.0.id());
+        assert_ne!(h, 0);
+        let mut addr = 0usize;
+        let mut calls = 0;
+        loop {
+            let mut info = MEMORY_BASIC_INFORMATION::default();
+            let n = VirtualQueryEx(h, addr as *const c_void, &mut info, size_of::<MEMORY_BASIC_INFORMATION>());
+            if n == 0 {
+                // .NET (SetLastError=true) reads errno, scanners compare it with ERROR_INVALID_PARAMETER.
+                assert_eq!(*libc::__errno_location(), 87);
+                assert_eq!(GetLastError(), 87);
+                break;
+            }
+            addr = info.BaseAddress + info.RegionSize;
+            calls += 1;
+            assert!(calls < 100_000, "scan did not terminate");
+        }
+    }
+}
