@@ -18,15 +18,27 @@ thread_local! { static ERROR: Cell<u32> = const { Cell::new(0) }; }
 fn error(e: u32) {
     ERROR.with(|v| v.set(e));
 }
-/// Opt-in diagnostics: set LIVESPLIT_SHIM_TRACE=1 to log API calls to stderr (capped so it cannot flood).
+/// Opt-in diagnostics: set LIVESPLIT_SHIM_TRACE=1 to log API calls to stderr. Identical consecutive
+/// messages are collapsed into a repeat count so a polling loop cannot flood the log.
 fn trace(msg: impl FnOnce() -> String) {
     static ON: OnceLock<bool> = OnceLock::new();
-    static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    if *ON.get_or_init(|| std::env::var_os("LIVESPLIT_SHIM_TRACE").is_some())
-        && COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 400
-    {
-        eprintln!("[win32shim] {}", msg());
+    static STATE: Mutex<(String, usize)> = Mutex::new((String::new(), 0));
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var_os("LIVESPLIT_SHIM_TRACE").is_some()) {
+        return;
     }
+    let start = START.get_or_init(std::time::Instant::now);
+    let text = msg();
+    let mut st = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    if st.0 == text {
+        st.1 += 1;
+        return;
+    }
+    if st.1 > 0 {
+        eprintln!("[win32shim]   (previous message repeated {} more times)", st.1);
+    }
+    eprintln!("[win32shim] +{}ms {}", start.elapsed().as_millis(), text);
+    *st = (text, 0);
 }
 fn io_error(e: &io::Error) {
     error(match e.raw_os_error() {
@@ -97,6 +109,13 @@ unsafe fn transfer(
     } else {
         libc::process_vm_readv(p, &local, 1, &remote, 1, 0)
     };
+    {
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let c = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        if c.is_power_of_two() {
+            trace(|| format!("memory transfer #{c}: pid {p} {addr:#x} size {size} -> {n}"));
+        }
+    }
     let result = if n >= 0 {
         Ok(n as usize)
     } else {
@@ -178,6 +197,7 @@ fn maps(h: usize) -> Option<Vec<Mapping>> {
     let text = match fs::read_to_string(format!("/proc/{p}/maps")) {
         Ok(t) => t,
         Err(e) => {
+            trace(|| format!("cannot read /proc/{p}/maps: {e}"));
             io_error(&e);
             return None;
         }
@@ -244,12 +264,18 @@ pub unsafe extern "C" fn VirtualQueryEx(
         return 0;
     }
     let Some(ms) = maps(h) else {
-        trace(|| format!("VirtualQueryEx: cannot read maps of {h}"));
         return 0;
     };
     let addr = a as usize;
     if addr == 0 {
         trace(|| format!("VirtualQueryEx scan of {h} starts, {} mappings", ms.len()));
+    }
+    {
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let c = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        if c.is_power_of_two() {
+            trace(|| format!("VirtualQueryEx call #{c} at {addr:#x} ({} mappings)", ms.len()));
+        }
     }
     let mut result = MEMORY_BASIC_INFORMATION::default();
     if let Some(m) = ms.iter().find(|m| addr >= m.start && addr < m.end) {
