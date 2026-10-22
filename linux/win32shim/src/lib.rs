@@ -42,6 +42,17 @@ fn trace(msg: impl FnOnce() -> String) {
     eprintln!("[win32shim] +{}ms {}", start.elapsed().as_millis(), text);
     *st = (text, 0);
 }
+/// Declared first in an exported function so it drops last, after the locals are freed: .NET's
+/// SetLastError=true reads errno once the call returns, and freeing memory in between can reset it.
+struct ErrnoGuard;
+impl Drop for ErrnoGuard {
+    fn drop(&mut self) {
+        let e = ERROR.with(Cell::get);
+        if e != 0 {
+            unsafe { *libc::__errno_location() = e as i32 };
+        }
+    }
+}
 fn io_error(e: &io::Error) {
     error(match e.raw_os_error() {
         Some(libc::EPERM | libc::EACCES) => 5,
@@ -63,6 +74,7 @@ pub unsafe extern "C" fn GetLastError() -> u32 {
 }
 #[no_mangle]
 pub unsafe extern "C" fn OpenProcess(_: u32, _: i32, p: u32) -> usize {
+    let _errno = ErrnoGuard;
     if p == 0 || p > i32::MAX as u32 {
         error(87);
         return 0;
@@ -87,6 +99,7 @@ unsafe fn transfer(
     count: *mut usize,
     write: bool,
 ) -> i32 {
+    let _errno = ErrnoGuard;
     if !count.is_null() {
         *count = 0;
     }
@@ -261,6 +274,7 @@ pub unsafe extern "C" fn VirtualQueryEx(
     out: *mut MEMORY_BASIC_INFORMATION,
     len: usize,
 ) -> usize {
+    let _errno = ErrnoGuard;
     if out.is_null() || len < size_of::<MEMORY_BASIC_INFORMATION>() {
         error(87);
         return 0;
@@ -457,6 +471,7 @@ unsafe fn module_name(
     wide: bool,
     full: bool,
 ) -> u32 {
+    let _errno = ErrnoGuard;
     let Some(ms) = modules(h) else { return 0 };
     let Some(m) = ms.iter().find(|m| base == 0 || m.base == base) else {
         error(6);
@@ -485,6 +500,7 @@ pub unsafe extern "C" fn EnumProcessModulesEx(
     needed: *mut u32,
     _: u32,
 ) -> i32 {
+    let _errno = ErrnoGuard;
     if needed.is_null() || (arr.is_null() && cb != 0) {
         error(87);
         return 0;
@@ -498,6 +514,7 @@ pub unsafe extern "C" fn EnumProcessModulesEx(
 }
 #[no_mangle]
 pub unsafe extern "C" fn EnumProcessModules(h: usize, a: *mut usize, c: u32, n: *mut u32) -> i32 {
+    let _errno = ErrnoGuard;
     EnumProcessModulesEx(h, a, c, n, 0)
 }
 #[no_mangle]
@@ -508,6 +525,7 @@ pub unsafe extern "C" fn K32EnumProcessModulesEx(
     n: *mut u32,
     f: u32,
 ) -> i32 {
+    let _errno = ErrnoGuard;
     EnumProcessModulesEx(h, a, c, n, f)
 }
 #[repr(C)]
@@ -525,6 +543,7 @@ pub unsafe extern "C" fn GetModuleInformation(
     out: *mut MODULEINFO,
     cb: u32,
 ) -> i32 {
+    let _errno = ErrnoGuard;
     if out.is_null() || (cb as usize) < size_of::<MODULEINFO>() {
         error(87);
         return 0;
@@ -674,6 +693,7 @@ fn snapshots() -> std::sync::MutexGuard<'static, HashMap<usize, Snapshot>> {
 }
 #[no_mangle]
 pub unsafe extern "C" fn CreateToolhelp32Snapshot(flags: u32, p: u32) -> usize {
+    let _errno = ErrnoGuard;
     if flags & (2 | 8 | 16) == 0 {
         error(50);
         return usize::MAX;
@@ -717,6 +737,7 @@ pub unsafe extern "C" fn CloseHandle(h: usize) -> i32 {
     1
 }
 unsafe fn process_entry(h: usize, out: *mut c_void, wide: bool, first: bool) -> i32 {
+    let _errno = ErrnoGuard;
     let expected = if wide {
         size_of::<PROCESSENTRY32W>()
     } else {
@@ -761,6 +782,7 @@ unsafe fn process_entry(h: usize, out: *mut c_void, wide: bool, first: bool) -> 
     1
 }
 unsafe fn module_entry(h: usize, out: *mut c_void, wide: bool, first: bool) -> i32 {
+    let _errno = ErrnoGuard;
     let expected = if wide {
         size_of::<MODULEENTRY32W>()
     } else {
@@ -839,6 +861,7 @@ fn wow64(h: usize) -> Option<bool> {
 
 #[no_mangle]
 pub unsafe extern "C" fn IsWow64Process(h: usize, out: *mut i32) -> i32 {
+    let _errno = ErrnoGuard;
     if out.is_null() {
         error(87);
         return 0;
