@@ -18,6 +18,16 @@ thread_local! { static ERROR: Cell<u32> = const { Cell::new(0) }; }
 fn error(e: u32) {
     ERROR.with(|v| v.set(e));
 }
+/// Opt-in diagnostics: set LIVESPLIT_SHIM_TRACE=1 to log API calls to stderr (capped so it cannot flood).
+fn trace(msg: impl FnOnce() -> String) {
+    static ON: OnceLock<bool> = OnceLock::new();
+    static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    if *ON.get_or_init(|| std::env::var_os("LIVESPLIT_SHIM_TRACE").is_some())
+        && COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 400
+    {
+        eprintln!("[win32shim] {}", msg());
+    }
+}
 fn io_error(e: &io::Error) {
     error(match e.raw_os_error() {
         Some(libc::EPERM | libc::EACCES) => 5,
@@ -44,8 +54,12 @@ pub unsafe extern "C" fn OpenProcess(_: u32, _: i32, p: u32) -> usize {
         return 0;
     }
     match fs::read_dir(format!("/proc/{p}")) {
-        Ok(_) => p as usize,
+        Ok(_) => {
+            trace(|| format!("OpenProcess({p}) ok"));
+            p as usize
+        }
         Err(e) => {
+            trace(|| format!("OpenProcess({p}) failed: {e}"));
             io_error(&e);
             0
         }
@@ -119,6 +133,9 @@ unsafe fn transfer(
             }
         }
         Err(e) => {
+            if !matches!(e.raw_os_error(), Some(libc::EFAULT | libc::EIO)) {
+                trace(|| format!("{}(pid {p}, {addr:#x}, {size}) failed: {e}", if write { "WriteProcessMemory" } else { "ReadProcessMemory" }));
+            }
             if matches!(e.raw_os_error(), Some(libc::EFAULT | libc::EIO)) {
                 error(299);
             } else {
@@ -226,8 +243,14 @@ pub unsafe extern "C" fn VirtualQueryEx(
         error(87);
         return 0;
     }
-    let Some(ms) = maps(h) else { return 0 };
+    let Some(ms) = maps(h) else {
+        trace(|| format!("VirtualQueryEx: cannot read maps of {h}"));
+        return 0;
+    };
     let addr = a as usize;
+    if addr == 0 {
+        trace(|| format!("VirtualQueryEx scan of {h} starts, {} mappings", ms.len()));
+    }
     let mut result = MEMORY_BASIC_INFORMATION::default();
     if let Some(m) = ms.iter().find(|m| addr >= m.start && addr < m.end) {
         result.BaseAddress = m.start;
