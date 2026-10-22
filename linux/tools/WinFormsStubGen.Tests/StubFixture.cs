@@ -13,6 +13,7 @@ public class StubFixture : IDisposable
     public string CoreDllPath { get; }
     public string DrawingDllPath { get; }
     public string ViewDllPath { get; }
+    public string SupportDllPath { get; }
     public Assembly StubAssembly { get; }
     public Assembly? ViewAssembly { get; }
     public AssemblyLoadContext Alc { get; }
@@ -44,6 +45,7 @@ public class StubFixture : IDisposable
         CoreDllPath = Path.Combine(TempDir, "LiveSplit.Core.dll");
         DrawingDllPath = Path.Combine(TempDir, "LiveSplit.Drawing.dll");
         ViewDllPath = Path.Combine(TempDir, "LiveSplit.View.dll");
+        SupportDllPath = Path.Combine(TempDir, "LiveSplit.Compat.WinForms.Support.dll");
 
         Alc = new AssemblyLoadContext("StubTestContext", isCollectible: true);
         Alc.Resolving += (context, assemblyName) =>

@@ -14,6 +14,8 @@ public static class StubSupport
 {
     private static readonly ConditionalWeakTable<object, List<object>> _collections = new();
     private static readonly ConditionalWeakTable<object, object> _collectionOwners = new();
+    private static readonly ConditionalWeakTable<object, Dictionary<string, object>> _propertyStore = new();
+    private static readonly ConditionalWeakTable<object, object> _bindingSourceLists = new();
 
     private sealed class EventKeyComparer : IEqualityComparer<(object Sender, string EventName)>
     {
@@ -30,6 +32,68 @@ public static class StubSupport
 
     [ThreadStatic]
     private static Dictionary<(object, string), int> _eventDepths;
+
+    public static void SetBackingField(object target, string propName, object value)
+    {
+        if (target == null) return;
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        var fld = target.GetType().GetField($"_{char.ToLowerInvariant(propName[0])}{propName.Substring(1)}", flags)
+            ?? target.GetType().GetField($"<{propName}>k__BackingField", flags)
+            ?? target.GetType().GetField(propName, flags);
+        if (fld != null)
+        {
+            try { fld.SetValue(target, value); return; } catch { }
+        }
+        var dict = _propertyStore.GetOrCreateValue(target);
+        dict[propName] = value;
+    }
+
+    public static T GetBackingField<T>(object target, string propName, T defaultValue = default)
+    {
+        if (target == null) return defaultValue;
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        var fld = target.GetType().GetField($"_{char.ToLowerInvariant(propName[0])}{propName.Substring(1)}", flags)
+            ?? target.GetType().GetField($"<{propName}>k__BackingField", flags)
+            ?? target.GetType().GetField(propName, flags);
+        if (fld != null)
+        {
+            try
+            {
+                object v = fld.GetValue(target);
+                if (v is T tv) return tv;
+                if (v == null) return defaultValue;
+            }
+            catch { }
+        }
+        if (_propertyStore.TryGetValue(target, out var dict) && dict.TryGetValue(propName, out object obj))
+        {
+            if (obj is T tv) return tv;
+        }
+        return defaultValue;
+    }
+
+    public static void FireEventDirect(object control, string eventName)
+    {
+        if (control == null) return;
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        Type curr = control.GetType();
+        FieldInfo fld = null;
+        while (curr != null && fld == null)
+        {
+            fld = curr.GetField($"<{eventName}>k__BackingField", flags)
+                ?? curr.GetField(eventName, flags)
+                ?? curr.GetField($"_{eventName}", flags);
+            curr = curr.BaseType;
+        }
+        if (fld != null)
+        {
+            var d = fld.GetValue(control) as MulticastDelegate;
+            if (d != null)
+            {
+                FireEvent(d, control, EventArgs.Empty, eventName);
+            }
+        }
+    }
 
     public static void SetCollectionOwner(object collection, object owner)
     {
@@ -162,6 +226,33 @@ public static class StubSupport
             }
         }
 
+        if (collection != null && collection.GetType().Name == "DataGridViewRowCollection")
+        {
+            if (item is int count)
+            {
+                int r = DgvRowCollectionAddCount(collection, count);
+                return r >= 0 ? CollectionGetItem(collection, r) : null;
+            }
+            if (item is object[] values)
+            {
+                int r = DgvRowCollectionAdd(collection, values);
+                return r >= 0 ? CollectionGetItem(collection, r) : null;
+            }
+            if (item != null && item.GetType().Name == "DataGridViewRow")
+            {
+                DgvRowCollectionAddRow(collection, item);
+                return item;
+            }
+        }
+        else if (collection != null && collection.GetType().Name == "DataGridViewColumnCollection")
+        {
+            if (item != null && item.GetType().Name.StartsWith("DataGridView") && item.GetType().Name.EndsWith("Column"))
+            {
+                DgvColumnCollectionAddCol(collection, item);
+                return item;
+            }
+        }
+
         var list = GetCollectionList(collection);
         list.Add(item);
         if (item != null)
@@ -190,7 +281,7 @@ public static class StubSupport
         if (collection == null) return -1;
         if (collection.GetType().Name == "DataGridViewRowCollection")
         {
-            return DgvRowCollectionAdd(collection, null);
+            return DgvRowCollectionAddEmpty(collection);
         }
         var list = GetCollectionList(collection);
         list.Add(null);
@@ -199,6 +290,16 @@ public static class StubSupport
 
     public static void CollectionAddRange(object collection, object items)
     {
+        if (collection != null && collection.GetType().Name == "DataGridViewRowCollection")
+        {
+            DgvRowCollectionAddRange(collection, items);
+            return;
+        }
+        if (collection != null && collection.GetType().Name == "DataGridViewColumnCollection")
+        {
+            DgvColumnCollectionAddRange(collection, items);
+            return;
+        }
         if (items is IEnumerable e)
         {
             foreach (var item in e)
@@ -343,6 +444,11 @@ public static class StubSupport
 
     public static void CollectionInsert(object collection, int index, object item)
     {
+        if (collection != null && collection.GetType().Name == "DataGridViewRowCollection")
+        {
+            DgvRowCollectionInsert(collection, index, item);
+            return;
+        }
         var list = GetCollectionList(collection);
         if (index >= 0 && index <= list.Count)
         {
@@ -375,6 +481,71 @@ public static class StubSupport
     }
 
     // DataGridView helpers
+    public static object FindDgv(object obj)
+    {
+        if (obj == null) return null;
+        var seen = new HashSet<object>();
+        object cur = obj;
+        while (cur != null && seen.Add(cur))
+        {
+            if (cur.GetType().Name == "DataGridView") return cur;
+            object fromStore = GetBackingField<object>(cur, "DataGridView");
+            if (fromStore != null && fromStore.GetType().Name == "DataGridView") return fromStore;
+
+            cur = GetCollectionOwner(cur);
+        }
+        return null;
+    }
+
+    public static void DgvRowCreateCells(object row, object dgv, object[] values)
+    {
+        if (row == null) return;
+        dgv ??= FindDgv(row);
+        if (dgv == null) return;
+
+        var cells = row.GetType().GetProperty("Cells")?.GetValue(row);
+        if (cells == null) return;
+        CollectionClear(cells);
+
+        var cols = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
+        var colList = cols != null ? GetCollectionList(cols) : new List<object>();
+
+        var asm = row.GetType().Assembly;
+        var defaultCellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
+            ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
+
+        for (int i = 0; i < colList.Count; i++)
+        {
+            var col = colList[i];
+            Type cellType = defaultCellType;
+            if (col != null)
+            {
+                var tmpl = col.GetType().GetProperty("CellTemplate")?.GetValue(col);
+                if (tmpl != null)
+                {
+                    cellType = tmpl.GetType();
+                }
+            }
+
+            var cell = cellType != null ? Activator.CreateInstance(cellType) : null;
+            if (cell != null)
+            {
+                if (values != null && i < values.Length)
+                {
+                    cell.GetType().GetProperty("Value")?.SetValue(cell, values[i]);
+                }
+                cell.GetType().GetProperty("OwningRow")?.SetValue(cell, row);
+                if (col != null)
+                {
+                    cell.GetType().GetProperty("OwningColumn")?.SetValue(cell, col);
+                }
+                SetCollectionOwner(cell, cells);
+                var cList = GetCollectionList(cells);
+                cList.Add(cell);
+            }
+        }
+    }
+
     public static int DgvRowCollectionAdd(object rowCollection, object[] values)
     {
         if (rowCollection == null) return -1;
@@ -383,36 +554,227 @@ public static class StubSupport
         if (rowType == null) return -1;
 
         var row = Activator.CreateInstance(rowType);
+        object dgv = FindDgv(rowCollection);
+        SetCollectionOwner(row, rowCollection);
         var cells = rowType.GetProperty("Cells")?.GetValue(row);
+        if (cells != null)
+        {
+            SetCollectionOwner(cells, row);
+        }
 
-        // Pre-populate cells matching columns if DGV is known
-        object dgv = GetCollectionOwner(rowCollection);
         if (dgv != null)
         {
-            SetCollectionOwner(row, dgv);
+            DgvRowCreateCells(row, dgv, values);
         }
-        object cols = dgv?.GetType().GetProperty("Columns")?.GetValue(dgv);
-        int colCount = cols != null ? CollectionCount(cols) : 0;
 
-        var cellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
-            ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
+        var list = GetCollectionList(rowCollection);
+        list.Add(row);
+        return list.Count - 1;
+    }
 
-        int targetCells = Math.Max(colCount, values != null ? values.Length : 0);
-        if (cells != null && cellType != null)
+    public static int DgvRowCollectionAddEmpty(object rowCollection)
+    {
+        return DgvRowCollectionAdd(rowCollection, null);
+    }
+
+    public static int DgvRowCollectionAddCount(object rowCollection, int count)
+    {
+        if (rowCollection == null || count <= 0) return -1;
+        int firstIdx = -1;
+        for (int i = 0; i < count; i++)
         {
-            for (int i = 0; i < targetCells; i++)
+            int idx = DgvRowCollectionAdd(rowCollection, null);
+            if (i == 0) firstIdx = idx;
+        }
+        return firstIdx;
+    }
+
+    public static int DgvRowCollectionAddRow(object rowCollection, object row)
+    {
+        if (rowCollection == null || row == null) return -1;
+        object dgv = FindDgv(rowCollection);
+        SetCollectionOwner(row, rowCollection);
+        var cells = row.GetType().GetProperty("Cells")?.GetValue(row);
+        if (cells != null)
+        {
+            SetCollectionOwner(cells, row);
+        }
+
+        if (dgv != null)
+        {
+            var cols = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
+            int colCount = cols != null ? CollectionCount(cols) : 0;
+            int cellCount = cells != null ? CollectionCount(cells) : 0;
+            if (cellCount < colCount)
             {
-                var cell = Activator.CreateInstance(cellType);
-                if (values != null && i < values.Length)
+                var colList = GetCollectionList(cols);
+                var asm = row.GetType().Assembly;
+                var defaultCellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
+                    ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
+                for (int i = cellCount; i < colCount; i++)
                 {
-                    cellType.GetProperty("Value")?.SetValue(cell, values[i]);
+                    var col = colList[i];
+                    Type cellType = defaultCellType;
+                    if (col != null)
+                    {
+                        var tmpl = col.GetType().GetProperty("CellTemplate")?.GetValue(col);
+                        if (tmpl != null) cellType = tmpl.GetType();
+                    }
+                    var cell = cellType != null ? Activator.CreateInstance(cellType) : null;
+                    if (cell != null)
+                    {
+                        cell.GetType().GetProperty("OwningRow")?.SetValue(cell, row);
+                        if (col != null) cell.GetType().GetProperty("OwningColumn")?.SetValue(cell, col);
+                        SetCollectionOwner(cell, cells);
+                        GetCollectionList(cells).Add(cell);
+                    }
                 }
-                CollectionAdd(cells, cell);
             }
         }
 
-        CollectionAdd(rowCollection, row);
-        return CollectionCount(rowCollection) - 1;
+        var list = GetCollectionList(rowCollection);
+        list.Add(row);
+        return list.Count - 1;
+    }
+
+    public static void DgvRowCollectionAddRange(object rowCollection, object rows)
+    {
+        if (rows is IEnumerable e)
+        {
+            foreach (var r in e)
+            {
+                if (r != null)
+                {
+                    DgvRowCollectionAddRow(rowCollection, r);
+                }
+            }
+        }
+    }
+
+    public static void DgvRowCollectionInsert(object rowCollection, int index, object value)
+    {
+        if (rowCollection == null) return;
+        var list = GetCollectionList(rowCollection);
+        if (index < 0 || index > list.Count) return;
+
+        if (value is int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var asm = rowCollection.GetType().Assembly;
+                var rowType = asm.GetType("System.Windows.Forms.DataGridViewRow");
+                var r = rowType != null ? Activator.CreateInstance(rowType) : null;
+                if (r != null)
+                {
+                    object dgv = FindDgv(rowCollection);
+                    SetCollectionOwner(r, rowCollection);
+                    var cells = rowType.GetProperty("Cells")?.GetValue(r);
+                    if (cells != null) SetCollectionOwner(cells, r);
+                    if (dgv != null) DgvRowCreateCells(r, dgv, null);
+                    list.Insert(index + i, r);
+                }
+            }
+            return;
+        }
+
+        if (value is object[] values)
+        {
+            var asm = rowCollection.GetType().Assembly;
+            var rowType = asm.GetType("System.Windows.Forms.DataGridViewRow");
+            var r = rowType != null ? Activator.CreateInstance(rowType) : null;
+            if (r != null)
+            {
+                object dgv = FindDgv(rowCollection);
+                SetCollectionOwner(r, rowCollection);
+                var cells = rowType.GetProperty("Cells")?.GetValue(r);
+                if (cells != null) SetCollectionOwner(cells, r);
+                if (dgv != null) DgvRowCreateCells(r, dgv, values);
+                list.Insert(index, r);
+            }
+            return;
+        }
+
+        if (value != null && value.GetType().Name == "DataGridViewRow")
+        {
+            object dgv = FindDgv(rowCollection);
+            SetCollectionOwner(value, rowCollection);
+            var cells = value.GetType().GetProperty("Cells")?.GetValue(value);
+            if (cells != null) SetCollectionOwner(cells, value);
+            if (dgv != null)
+            {
+                var cols = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
+                int colCount = cols != null ? CollectionCount(cols) : 0;
+                int cellCount = cells != null ? CollectionCount(cells) : 0;
+                if (cellCount < colCount)
+                {
+                    var colList = GetCollectionList(cols);
+                    var asm = value.GetType().Assembly;
+                    var defaultCellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
+                        ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
+                    for (int i = cellCount; i < colCount; i++)
+                    {
+                        var col = colList[i];
+                        Type cellType = defaultCellType;
+                        if (col != null)
+                        {
+                            var tmpl = col.GetType().GetProperty("CellTemplate")?.GetValue(col);
+                            if (tmpl != null) cellType = tmpl.GetType();
+                        }
+                        var cell = cellType != null ? Activator.CreateInstance(cellType) : null;
+                        if (cell != null)
+                        {
+                            cell.GetType().GetProperty("OwningRow")?.SetValue(cell, value);
+                            if (col != null) cell.GetType().GetProperty("OwningColumn")?.SetValue(cell, col);
+                            SetCollectionOwner(cell, cells);
+                            GetCollectionList(cells).Add(cell);
+                        }
+                    }
+                }
+            }
+            list.Insert(index, value);
+            return;
+        }
+
+        list.Insert(index, value);
+    }
+
+    public static int DgvColumnCollectionAddCol(object colCollection, object col)
+    {
+        if (colCollection == null || col == null) return -1;
+        SetCollectionOwner(col, colCollection);
+        var list = GetCollectionList(colCollection);
+        list.Add(col);
+
+        // Expand cells on all existing rows in DGV
+        object dgv = FindDgv(colCollection);
+        if (dgv != null)
+        {
+            var rows = dgv.GetType().GetProperty("Rows")?.GetValue(dgv);
+            if (rows != null)
+            {
+                var rowList = GetCollectionList(rows);
+                var tmpl = col.GetType().GetProperty("CellTemplate")?.GetValue(col);
+                var defaultCellType = col.GetType().Assembly.GetType("System.Windows.Forms.DataGridViewTextBoxCell")
+                    ?? col.GetType().Assembly.GetType("System.Windows.Forms.DataGridViewCell");
+                Type cellType = tmpl?.GetType() ?? defaultCellType;
+
+                foreach (var row in rowList)
+                {
+                    if (row == null) continue;
+                    var cells = row.GetType().GetProperty("Cells")?.GetValue(row);
+                    if (cells == null) continue;
+                    var cell = cellType != null ? Activator.CreateInstance(cellType) : null;
+                    if (cell != null)
+                    {
+                        cell.GetType().GetProperty("OwningRow")?.SetValue(cell, row);
+                        cell.GetType().GetProperty("OwningColumn")?.SetValue(cell, col);
+                        SetCollectionOwner(cell, cells);
+                        GetCollectionList(cells).Add(cell);
+                    }
+                }
+            }
+        }
+        return list.Count - 1;
     }
 
     public static int DgvColumnCollectionAdd(object colCollection, string name, string headerText)
@@ -427,28 +789,67 @@ public static class StubSupport
         colType.GetProperty("Name")?.SetValue(col, name);
         colType.GetProperty("HeaderText")?.SetValue(col, headerText);
 
-        CollectionAdd(colCollection, col);
-        return CollectionCount(colCollection) - 1;
+        return DgvColumnCollectionAddCol(colCollection, col);
+    }
+
+    public static void DgvColumnCollectionAddRange(object colCollection, object cols)
+    {
+        if (cols is IEnumerable e)
+        {
+            foreach (var col in e)
+            {
+                if (col != null)
+                {
+                    DgvColumnCollectionAddCol(colCollection, col);
+                }
+            }
+        }
     }
 
     public static object DgvCellCollectionGetItem(object cellsCollection, object indexOrName)
     {
         if (cellsCollection == null) return null;
         var list = GetCollectionList(cellsCollection);
+        object row = GetCollectionOwner(cellsCollection);
+        object dgv = FindDgv(cellsCollection);
+        var asm = cellsCollection.GetType().Assembly;
+        var defaultCellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
+            ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
 
         if (indexOrName is int idx)
         {
-            if (idx >= 0 && idx < list.Count) return list[idx];
-            // Lazily expand cells if requested index is beyond count
+            if (idx >= 0 && idx < list.Count && list[idx] != null)
+            {
+                return list[idx];
+            }
+
             if (idx >= 0)
             {
-                var asm = cellsCollection.GetType().Assembly;
-                var cellType = asm.GetType("System.Windows.Forms.DataGridViewTextBoxCell") 
-                    ?? asm.GetType("System.Windows.Forms.DataGridViewCell");
+                object cols = dgv?.GetType().GetProperty("Columns")?.GetValue(dgv);
+                var colList = cols != null ? GetCollectionList(cols) : null;
+
                 while (list.Count <= idx)
                 {
+                    int curIdx = list.Count;
+                    object col = colList != null && curIdx < colList.Count ? colList[curIdx] : null;
+                    Type cellType = defaultCellType;
+                    if (col != null)
+                    {
+                        var tmpl = col.GetType().GetProperty("CellTemplate")?.GetValue(col);
+                        if (tmpl != null) cellType = tmpl.GetType();
+                    }
                     var cell = cellType != null ? Activator.CreateInstance(cellType) : null;
-                    CollectionAdd(cellsCollection, cell);
+                    if (cell != null)
+                    {
+                        if (row != null) cell.GetType().GetProperty("OwningRow")?.SetValue(cell, row);
+                        if (col != null) cell.GetType().GetProperty("OwningColumn")?.SetValue(cell, col);
+                        SetCollectionOwner(cell, cellsCollection);
+                    }
+                    list.Add(cell);
+                }
+                if (list[idx] == null)
+                {
+                    list[idx] = Activator.CreateInstance(defaultCellType);
                 }
                 return list[idx];
             }
@@ -457,19 +858,6 @@ public static class StubSupport
 
         if (indexOrName is string colName)
         {
-            // Find in parent DGV columns
-            object row = GetCollectionOwner(cellsCollection);
-            object dgv = row != null ? GetCollectionOwner(row) : null;
-            while (dgv != null && dgv.GetType().Name != "DataGridView")
-            {
-                dgv = GetCollectionOwner(dgv);
-            }
-            if (dgv == null && row != null)
-            {
-                var dgvProp = row.GetType().GetProperty("DataGridView", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                dgv = dgvProp?.GetValue(row);
-            }
-
             if (dgv != null)
             {
                 object columns = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
@@ -482,7 +870,11 @@ public static class StubSupport
                         if (col != null)
                         {
                             var nProp = col.GetType().GetProperty("Name");
-                            if (string.Equals(nProp?.GetValue(col) as string, colName, StringComparison.OrdinalIgnoreCase))
+                            var hProp = col.GetType().GetProperty("HeaderText");
+                            string nameVal = nProp?.GetValue(col) as string;
+                            string headerVal = hProp?.GetValue(col) as string;
+                            if (string.Equals(nameVal, colName, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(headerVal, colName, StringComparison.OrdinalIgnoreCase))
                             {
                                 return DgvCellCollectionGetItem(cellsCollection, c);
                             }
@@ -491,20 +883,19 @@ public static class StubSupport
                 }
             }
 
-            // Fallback: check cells directly
             foreach (var cell in list)
             {
                 if (cell != null)
                 {
-                    var nameProp = cell.GetType().GetProperty("OwningColumn")?.GetValue(cell)?.GetType().GetProperty("Name");
-                    if (string.Equals(nameProp?.GetValue(cell) as string, colName, StringComparison.OrdinalIgnoreCase))
+                    var owningCol = cell.GetType().GetProperty("OwningColumn")?.GetValue(cell);
+                    var nameVal = owningCol?.GetType().GetProperty("Name")?.GetValue(owningCol) as string;
+                    if (string.Equals(nameVal, colName, StringComparison.OrdinalIgnoreCase))
                     {
                         return cell;
                     }
                 }
             }
 
-            // If still not found, create a cell and return it
             return DgvCellCollectionGetItem(cellsCollection, list.Count);
         }
 
@@ -552,25 +943,33 @@ public static class StubSupport
             int idx = CollectionIndexOf(ownerCol, band);
             if (idx >= 0) return idx;
         }
-        // Fallback to checking DataGridView.Columns or Rows
-        var dgvProp = band.GetType().GetProperty("DataGridView", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        var dgv = dgvProp?.GetValue(band);
+        object dgv = FindDgv(band);
         if (dgv != null)
         {
-            var cols = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
-            if (cols != null)
-            {
-                int cIdx = CollectionIndexOf(cols, band);
-                if (cIdx >= 0) return cIdx;
-            }
             var rows = dgv.GetType().GetProperty("Rows")?.GetValue(dgv);
             if (rows != null)
             {
                 int rIdx = CollectionIndexOf(rows, band);
                 if (rIdx >= 0) return rIdx;
             }
+            var cols = dgv.GetType().GetProperty("Columns")?.GetValue(dgv);
+            if (cols != null)
+            {
+                int cIdx = CollectionIndexOf(cols, band);
+                if (cIdx >= 0) return cIdx;
+            }
         }
-        return 0;
+        return GetBackingField<int>(band, "Index", -1);
+    }
+
+    public static void DgvBandSetIndex(object band, int index)
+    {
+        SetBackingField(band, "Index", index);
+    }
+
+    public static object DgvGetElementDataGridView(object element)
+    {
+        return FindDgv(element);
     }
 
     public static object ToolStripItemCollectionAdd(object collection, string text, object image, EventHandler onClick)
@@ -1206,5 +1605,217 @@ public static class StubSupport
             if (selectedIndex < list.Count) return list[selectedIndex];
         }
         return null;
+    }
+
+    public static void ComboBoxSetDataSource(object control, object dataSource)
+    {
+        if (control == null) return;
+        SetBackingField(control, "DataSource", dataSource);
+
+        var items = control.GetType().GetProperty("Items")?.GetValue(control);
+        if (items != null)
+        {
+            CollectionClear(items);
+            if (dataSource is IEnumerable en && !(dataSource is string))
+            {
+                foreach (var item in en)
+                {
+                    CollectionAdd(items, item);
+                }
+            }
+        }
+
+        int count = items != null ? CollectionCount(items) : 0;
+        int newIdx = count > 0 ? 0 : -1;
+        object newSelItem = (count > 0 && items != null) ? CollectionGetItem(items, 0) : null;
+
+        // "DataSource setting populates Items and fires nothing/selects index 0 like WinForms does"
+        SetBackingField(control, "SelectedIndex", newIdx);
+        SetBackingField(control, "SelectedItem", newSelItem);
+    }
+
+    public static void ComboBoxSetSelectedIndex(object control, int newIndex)
+    {
+        if (control == null) return;
+        int oldIndex = GetBackingField<int>(control, "SelectedIndex", -1);
+        if (oldIndex == newIndex) return;
+
+        SetBackingField(control, "SelectedIndex", newIndex);
+
+        var items = control.GetType().GetProperty("Items")?.GetValue(control);
+        int count = items != null ? CollectionCount(items) : 0;
+        object newSelItem = (newIndex >= 0 && newIndex < count && items != null) ? CollectionGetItem(items, newIndex) : null;
+        if (newSelItem == null && newIndex >= 0)
+        {
+            object ds = control.GetType().GetProperty("DataSource")?.GetValue(control);
+            if (ds is IList list && newIndex < list.Count) newSelItem = list[newIndex];
+        }
+        SetBackingField(control, "SelectedItem", newSelItem);
+
+        FireEventDirect(control, "SelectedIndexChanged");
+    }
+
+    public static void ComboBoxSetSelectedItem(object control, object newItem)
+    {
+        if (control == null) return;
+        object oldItem = GetBackingField<object>(control, "SelectedItem", null);
+        if (ValuesEqual(oldItem, newItem)) return;
+
+        SetBackingField(control, "SelectedItem", newItem);
+
+        // Find new SelectedIndex
+        int idx = -1;
+        var items = control.GetType().GetProperty("Items")?.GetValue(control);
+        if (items != null)
+        {
+            idx = CollectionIndexOf(items, newItem);
+        }
+        if (idx < 0)
+        {
+            object ds = control.GetType().GetProperty("DataSource")?.GetValue(control);
+            if (ds is IList list)
+            {
+                idx = list.IndexOf(newItem);
+            }
+        }
+
+        SetBackingField(control, "SelectedIndex", idx);
+        FireEventDirect(control, "SelectedIndexChanged");
+    }
+
+    public static object ComboBoxGetSelectedItem(object control)
+    {
+        if (control == null) return null;
+        object sel = GetBackingField<object>(control, "SelectedItem", null);
+        if (sel != null) return sel;
+
+        int idx = GetBackingField<int>(control, "SelectedIndex", -1);
+        if (idx >= 0)
+        {
+            var items = control.GetType().GetProperty("Items")?.GetValue(control);
+            if (items != null && idx < CollectionCount(items))
+            {
+                return CollectionGetItem(items, idx);
+            }
+            object ds = control.GetType().GetProperty("DataSource")?.GetValue(control);
+            if (ds is IList list && idx < list.Count)
+            {
+                return list[idx];
+            }
+            if (ds is IEnumerable en)
+            {
+                int i = 0;
+                foreach (var elem in en)
+                {
+                    if (i == idx) return elem;
+                    i++;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static object ComboBoxGetSelectedValue(object control)
+    {
+        if (control == null) return null;
+        object selItem = ComboBoxGetSelectedItem(control);
+        string valMember = control.GetType().GetProperty("ValueMember")?.GetValue(control) as string;
+        if (selItem != null && !string.IsNullOrEmpty(valMember))
+        {
+            var prop = selItem.GetType().GetProperty(valMember);
+            if (prop != null) return prop.GetValue(selItem);
+        }
+        return GetBackingField<object>(control, "SelectedValue", selItem);
+    }
+
+    public static void ComboBoxSetSelectedValue(object control, object val)
+    {
+        if (control == null) return;
+        SetBackingField(control, "SelectedValue", val);
+
+        string valMember = control.GetType().GetProperty("ValueMember")?.GetValue(control) as string;
+        var items = control.GetType().GetProperty("Items")?.GetValue(control);
+        object matchItem = null;
+
+        if (items != null)
+        {
+            var list = GetCollectionList(items);
+            foreach (var item in list)
+            {
+                if (item == null) continue;
+                if (!string.IsNullOrEmpty(valMember))
+                {
+                    var p = item.GetType().GetProperty(valMember);
+                    if (ValuesEqual(p?.GetValue(item), val))
+                    {
+                        matchItem = item;
+                        break;
+                    }
+                }
+                else if (ValuesEqual(item, val))
+                {
+                    matchItem = item;
+                    break;
+                }
+            }
+        }
+
+        if (matchItem != null)
+        {
+            ComboBoxSetSelectedItem(control, matchItem);
+        }
+    }
+
+    public static void BindingSourceSetDataSource(object bindingSource, object dataSource)
+    {
+        if (bindingSource == null) return;
+        SetBackingField(bindingSource, "DataSource", dataSource);
+
+        if (dataSource is Type t)
+        {
+            var blType = typeof(System.ComponentModel.BindingList<>).MakeGenericType(t);
+            var bl = Activator.CreateInstance(blType);
+            _bindingSourceLists.AddOrUpdate(bindingSource, bl);
+        }
+        else if (dataSource is IList list)
+        {
+            _bindingSourceLists.AddOrUpdate(bindingSource, list);
+        }
+        else if (dataSource is IEnumerable en && !(dataSource is string))
+        {
+            var bl = new System.ComponentModel.BindingList<object>();
+            foreach (var x in en) bl.Add(x);
+            _bindingSourceLists.AddOrUpdate(bindingSource, bl);
+        }
+        else
+        {
+            var bl = new System.ComponentModel.BindingList<object>();
+            _bindingSourceLists.AddOrUpdate(bindingSource, bl);
+        }
+    }
+
+    public static object BindingSourceGetList(object bindingSource)
+    {
+        if (bindingSource == null) return new System.ComponentModel.BindingList<object>();
+        if (_bindingSourceLists.TryGetValue(bindingSource, out object list) && list != null)
+        {
+            return list;
+        }
+
+        object ds = bindingSource.GetType().GetProperty("DataSource")?.GetValue(bindingSource);
+        if (ds is Type t)
+        {
+            var blType = typeof(System.ComponentModel.BindingList<>).MakeGenericType(t);
+            var bl = Activator.CreateInstance(blType);
+            _bindingSourceLists.AddOrUpdate(bindingSource, bl);
+            return bl;
+        }
+        if (ds is IList il)
+        {
+            return il;
+        }
+        var defaultBl = new System.ComponentModel.BindingList<object>();
+        _bindingSourceLists.AddOrUpdate(bindingSource, defaultBl);
+        return defaultBl;
     }
 }

@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="$(RootPath)/linux/native/LiveSplit.Compat.WinForms*.dll;$(RootPath)/linux/native/LiveSplit.View.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RootPath)/linux/native/LiveSplit.Compat.WinForms*.dll;$(RootPath)/linux/native/LiveSplit.View.dll;$(RootPath)/linux/native/System.Windows.Forms.dll;$(RootPath)/linux/native/System.Drawing.Common.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

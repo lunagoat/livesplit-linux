@@ -45,6 +45,10 @@ public class DefaultValuesAndTreeSemanticsTests : IClassFixture<StubFixture>
         {
             references.Add(MetadataReference.CreateFromFile(_fixture.ViewDllPath));
         }
+        if (File.Exists(_fixture.SupportDllPath))
+        {
+            references.Add(MetadataReference.CreateFromFile(_fixture.SupportDllPath));
+        }
 
         var compilation = CSharpCompilation.Create(
             assemblyName + "_" + Guid.NewGuid().ToString("N"),
@@ -513,5 +517,278 @@ public class GenericColRunner
         var runnerType = asm.GetType("GenericColRunner")!;
         dynamic runner = Activator.CreateInstance(runnerType)!;
         runner.Run();
+    }
+
+    [Fact]
+    public void DataGridView_RowCollection_And_Cell_Semantics()
+    {
+        string code = @"
+using System;
+using System.Windows.Forms;
+
+public class DgvTestRunner
+{
+    public void Run()
+    {
+        var dgv = new DataGridView();
+
+        // 1. CurrentRow settable and null by default, IsCurrentRowDirty false
+        if (dgv.CurrentRow != null) throw new Exception(""CurrentRow must be null by default"");
+        if (dgv.IsCurrentRowDirty) throw new Exception(""IsCurrentRowDirty must be false"");
+
+        // 2. Add columns
+        dgv.Columns.Add(""Col1"", ""Header 1"");
+        var chkCol = new DataGridViewCheckBoxColumn { Name = ""Col2"", HeaderText = ""Header 2"" };
+        dgv.Columns.Add(chkCol);
+
+        if (dgv.Columns.Count != 2) throw new Exception(""Columns.Count must be 2"");
+
+        // 3. Add(params object[] values)
+        int r0 = dgv.Rows.Add(""Val1"", true);
+        if (r0 != 0) throw new Exception(""Rows.Add returned wrong index"");
+        if (dgv.Rows.Count != 1) throw new Exception(""Rows.Count must be 1"");
+
+        var row0 = dgv.Rows[0];
+        if (row0.IsNewRow) throw new Exception(""row.IsNewRow must be false"");
+        if (row0.Index != 0) throw new Exception($""row0.Index must be 0, was {row0.Index}"");
+        if (!object.ReferenceEquals(row0.DataGridView, dgv)) throw new Exception(""row0.DataGridView must be dgv"");
+        if (row0.Cells.Count != 2) throw new Exception($""row0.Cells.Count must be 2, was {row0.Cells.Count}"");
+        if ((string)row0.Cells[0].Value != ""Val1"") throw new Exception(""Cells[0].Value mismatch"");
+        if ((bool)row0.Cells[1].Value != true) throw new Exception(""Cells[1].Value mismatch"");
+        if (row0.Cells[1].GetType().Name != ""DataGridViewCheckBoxCell"") throw new Exception(""Cells[1] must use CellTemplate"");
+
+        // Indexer by column name and int index
+        if (!object.ReferenceEquals(row0.Cells[""Col1""], row0.Cells[0])) throw new Exception(""Cells[colName] mismatch"");
+        if (!object.ReferenceEquals(row0.Cells[""Col2""], row0.Cells[1])) throw new Exception(""Cells[colName] mismatch"");
+
+        // Cell value set
+        row0.Cells[0].Value = ""NewVal"";
+        if ((string)row0.Cells[0].Value != ""NewVal"") throw new Exception(""Cells[0].Value set failed"");
+
+        // 4. Add() empty
+        int r1 = dgv.Rows.Add();
+        if (r1 != 1) throw new Exception(""Rows.Add() index mismatch"");
+        if (dgv.Rows[1].Cells.Count != 2) throw new Exception(""Rows[1].Cells.Count mismatch"");
+        if (dgv.Rows[1].Cells[0] == null) throw new Exception(""Rows[1].Cells[0] must not be null"");
+
+        // 5. Add(int count)
+        int r2 = dgv.Rows.Add(2);
+        if (r2 != 2) throw new Exception(""Rows.Add(count) index mismatch"");
+        if (dgv.Rows.Count != 4) throw new Exception(""Rows.Count after Add(2) mismatch"");
+
+        // 6. Add(DataGridViewRow)
+        var customRow = new DataGridViewRow();
+        int r4 = dgv.Rows.Add(customRow);
+        if (r4 != 4) throw new Exception(""Rows.Add(row) index mismatch"");
+        if (customRow.Cells.Count != 2) throw new Exception(""customRow cells not populated on Add"");
+        if (customRow.Index != 4) throw new Exception(""customRow.Index mismatch"");
+
+        // 7. Insert(index, row) and Insert(index, count) and Insert(index, values)
+        var insertedRow = new DataGridViewRow();
+        dgv.Rows.Insert(1, insertedRow);
+        if (dgv.Rows.Count != 6) throw new Exception(""Rows.Count after Insert mismatch"");
+        if (!object.ReferenceEquals(dgv.Rows[1], insertedRow)) throw new Exception(""Inserted row mismatch"");
+        if (insertedRow.Cells.Count != 2) throw new Exception(""insertedRow cells not populated"");
+
+        dgv.Rows.Insert(0, 1); // insert count
+        if (dgv.Rows.Count != 7) throw new Exception(""Rows.Count after Insert count mismatch"");
+
+        dgv.Rows.Insert(0, new object[] { ""InsertedVal"", false });
+        if (dgv.Rows.Count != 8) throw new Exception(""Rows.Count after Insert values mismatch"");
+        if ((string)dgv.Rows[0].Cells[0].Value != ""InsertedVal"") throw new Exception(""Inserted values cell value mismatch"");
+
+        // 8. Adding column expands existing rows
+        dgv.Columns.Add(""Col3"", ""Header 3"");
+        if (dgv.Rows[0].Cells.Count != 3) throw new Exception(""Adding column did not expand cells"");
+        if (dgv.Rows[0].Cells[""Col3""] == null) throw new Exception(""Cells[Col3] was null"");
+
+        // 9. CurrentRow settable
+        dgv.CurrentRow = dgv.Rows[0];
+        if (!object.ReferenceEquals(dgv.CurrentRow, dgv.Rows[0])) throw new Exception(""CurrentRow set failed"");
+
+        // 10. RowCount and ColumnCount
+        var dgv2 = new DataGridView();
+        dgv2.ColumnCount = 3;
+        if (dgv2.Columns.Count != 3) throw new Exception(""ColumnCount setter failed"");
+        dgv2.RowCount = 4;
+        if (dgv2.Rows.Count != 4) throw new Exception(""RowCount setter failed"");
+        if (dgv2.Rows[0].Cells.Count != 3) throw new Exception(""RowCount rows did not have ColumnCount cells"");
+
+        // 11. RemoveAt and Clear
+        dgv2.Rows.RemoveAt(0);
+        if (dgv2.Rows.Count != 3) throw new Exception(""RemoveAt failed"");
+        dgv2.Rows.Clear();
+        if (dgv2.Rows.Count != 0) throw new Exception(""Clear failed"");
+
+        // 12. CreateCells
+        var standaloneRow = new DataGridViewRow();
+        standaloneRow.CreateCells(dgv, ""C1"", false, ""C3"");
+        if (standaloneRow.Cells.Count != 3) throw new Exception(""CreateCells count mismatch"");
+        if ((string)standaloneRow.Cells[0].Value != ""C1"") throw new Exception(""CreateCells Value mismatch"");
+    }
+}
+";
+        var asm = CompileAssembly(code, "DgvTests");
+        var runnerType = asm.GetType("DgvTestRunner")!;
+        dynamic runner = Activator.CreateInstance(runnerType)!;
+        runner.Run();
+    }
+
+    [Fact]
+    public void ComboBox_ListBox_BindingSource_SelectionSemantics()
+    {
+        string code = @"
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
+
+public class TestItem
+{
+    public string Name { get; set; }
+    public int Id { get; set; }
+    public TestItem(string name, int id) { Name = name; Id = id; }
+    public override string ToString() => Name;
+}
+
+public class ComboRunner
+{
+    public void Run()
+    {
+        var cb = new ComboBox();
+        int changedCount = 0;
+        cb.SelectedIndexChanged += (s, e) => { changedCount++; };
+
+        var list = new List<TestItem>
+        {
+            new TestItem(""ItemA"", 10),
+            new TestItem(""ItemB"", 20),
+            new TestItem(""ItemC"", 30)
+        };
+
+        // 1. Setting DataSource populates Items, selects index 0, does NOT fire SelectedIndexChanged
+        cb.DisplayMember = ""Name"";
+        cb.ValueMember = ""Id"";
+        cb.DataSource = list;
+
+        if (changedCount != 0) throw new Exception($""SelectedIndexChanged must not fire on DataSource set, fired {changedCount} times"");
+        if (cb.SelectedIndex != 0) throw new Exception($""SelectedIndex must be 0 after DataSource set, was {cb.SelectedIndex}"");
+        if (!object.ReferenceEquals(cb.SelectedItem, list[0])) throw new Exception(""SelectedItem must be item 0"");
+        if ((int)cb.SelectedValue != 10) throw new Exception($""SelectedValue must be 10, was {cb.SelectedValue}"");
+
+        // 2. Setting SelectedIndex to same value does NOT fire
+        cb.SelectedIndex = 0;
+        if (changedCount != 0) throw new Exception(""SelectedIndex = same must not fire"");
+
+        // 3. Setting SelectedIndex to new value fires once and updates SelectedItem
+        cb.SelectedIndex = 2;
+        if (changedCount != 1) throw new Exception($""SelectedIndex = 2 must fire once, fired {changedCount}"");
+        if (!object.ReferenceEquals(cb.SelectedItem, list[2])) throw new Exception(""SelectedItem must be item 2"");
+        if ((int)cb.SelectedValue != 30) throw new Exception(""SelectedValue mismatch after index 2"");
+
+        // 4. Setting SelectedItem fires once and updates SelectedIndex
+        cb.SelectedItem = list[1];
+        if (changedCount != 2) throw new Exception(""SelectedItem = list[1] must fire once"");
+        if (cb.SelectedIndex != 1) throw new Exception($""SelectedIndex must be 1, was {cb.SelectedIndex}"");
+        if ((int)cb.SelectedValue != 20) throw new Exception(""SelectedValue mismatch after item 1"");
+
+        // Setting SelectedItem to same does NOT fire
+        cb.SelectedItem = list[1];
+        if (changedCount != 2) throw new Exception(""SelectedItem = same must not fire"");
+
+        // 5. BindingSource DataSource = typeof(T) creates typed BindingList<T>
+        var bs = new BindingSource();
+        bs.DataSource = typeof(TestItem);
+        var bsList = bs.List;
+        if (bsList == null) throw new Exception(""BindingSource.List must not be null"");
+        var typedList = bsList as IList<TestItem>;
+        if (typedList == null) throw new Exception($""BindingSource.List must implement IList<TestItem>, was {bsList.GetType().FullName}"");
+        typedList.Clear(); // Must not throw
+        typedList.Add(new TestItem(""Test"", 99));
+        if (typedList.Count != 1) throw new Exception(""typedList.Count must be 1"");
+    }
+}
+";
+        var asm = CompileAssembly(code, "ComboTests");
+        var runnerType = asm.GetType("ComboRunner")!;
+        dynamic runner = Activator.CreateInstance(runnerType)!;
+        runner.Run();
+    }
+
+    [Fact]
+    public void SystemDrawing_Types_And_Forwarders()
+    {
+        string code = @"
+using System;
+using System.Drawing;
+using System.Drawing.Text;
+
+public class DrawingRunner
+{
+    public void Run()
+    {
+        // 1. PrivateFontCollection
+        using (var pfc = new PrivateFontCollection())
+        {
+            pfc.AddMemoryFont(IntPtr.Zero, 0);
+            if (pfc.Families == null || pfc.Families.Length == 0) throw new Exception(""PrivateFontCollection.Families must not be empty"");
+            if (pfc.Families[0] == null) throw new Exception(""Families[0] must not be null"");
+        }
+
+        // 2. InstalledFontCollection
+        using (var ifc = new InstalledFontCollection())
+        {
+            if (ifc.Families == null || ifc.Families.Length == 0) throw new Exception(""InstalledFontCollection.Families must not be empty"");
+        }
+
+        // 3. SystemIcons
+        var questionIcon = SystemIcons.Question;
+        if (questionIcon == null) throw new Exception(""SystemIcons.Question must not be null"");
+        using (var bmp = questionIcon.ToBitmap())
+        {
+            if (bmp == null) throw new Exception(""Icon.ToBitmap() must not be null"");
+            if (bmp.Width <= 0 || bmp.Height <= 0) throw new Exception(""Bitmap size must be positive"");
+        }
+
+        var infoIcon = SystemIcons.Information;
+        if (infoIcon == null) throw new Exception(""SystemIcons.Information must not be null"");
+
+        // 4. ColorTranslator
+        var color = ColorTranslator.FromHtml(""#FF0000"");
+        if (color.R != 255 || color.G != 0 || color.B != 0) throw new Exception(""ColorTranslator.FromHtml failed"");
+        string html = ColorTranslator.ToHtml(color);
+        if (string.IsNullOrEmpty(html)) throw new Exception(""ColorTranslator.ToHtml failed"");
+
+        // 5. ImageConverter
+        var conv = new ImageConverter();
+        if (!conv.CanConvertFrom(typeof(byte[]))) throw new Exception(""ImageConverter.CanConvertFrom(byte[]) must be true"");
+    }
+}
+";
+        var asm = CompileAssembly(code, "DrawingTests");
+        var runnerType = asm.GetType("DrawingRunner")!;
+        dynamic runner = Activator.CreateInstance(runnerType)!;
+        runner.Run();
+    }
+
+    [Fact]
+    public void CompanionAssemblies_Generated_With_Forwarders()
+    {
+        string swfPath = Path.Combine(_fixture.TempDir, "System.Windows.Forms.dll");
+        string sdcPath = Path.Combine(_fixture.TempDir, "System.Drawing.Common.dll");
+        string sdPath = Path.Combine(_fixture.TempDir, "System.Drawing.dll");
+
+        Assert.True(File.Exists(swfPath), "System.Windows.Forms.dll must be generated");
+        Assert.True(File.Exists(sdcPath), "System.Drawing.Common.dll must be generated");
+        Assert.True(File.Exists(sdPath), "System.Drawing.dll must be generated");
+
+        var swf = Mono.Cecil.AssemblyDefinition.ReadAssembly(swfPath);
+        Assert.True(swf.MainModule.ExportedTypes.Count > 50, "System.Windows.Forms.dll must have exported types");
+        Assert.Contains(swf.MainModule.ExportedTypes, et => et.FullName == "System.Windows.Forms.Control" && et.IsForwarder);
+        Assert.Contains(swf.MainModule.ExportedTypes, et => et.FullName == "System.Windows.Forms.DataGridView" && et.IsForwarder);
+
+        var sdc = Mono.Cecil.AssemblyDefinition.ReadAssembly(sdcPath);
+        Assert.Contains(sdc.MainModule.ExportedTypes, et => et.FullName == "System.Drawing.Text.PrivateFontCollection" && et.IsForwarder);
+        Assert.Contains(sdc.MainModule.ExportedTypes, et => et.FullName == "System.Drawing.SystemIcons" && et.IsForwarder);
+        Assert.Contains(sdc.MainModule.ExportedTypes, et => et.FullName == "System.Drawing.Bitmap" && et.IsForwarder);
     }
 }

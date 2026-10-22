@@ -103,8 +103,11 @@ dotnet run --project "$ROOT_DIR/linux/tools/WinFormsStubGen" -c Release -- \
     --core "$OUTPUT_DIR/LiveSplit.Core.dll" \
     --drawing "$OUTPUT_DIR/LiveSplit.Drawing.dll" \
     --out "$STUB_TMP"
-cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$STUB_TMP/LiveSplit.View.dll" "$OUTPUT_DIR/"
-cp -f "$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$STUB_TMP/LiveSplit.View.dll" "$NATIVE_DIR/"
+# The System.Windows.Forms / System.Drawing.Common forwarders resolve references from assemblies a component
+# loads itself (e.g. Costura-embedded). Never copy the generated System.Drawing.dll: the runtime ships its own.
+STUB_FILES=("$STUB_TMP/LiveSplit.Compat.WinForms.dll" "$STUB_TMP/LiveSplit.Compat.WinForms.Support.dll" "$STUB_TMP/LiveSplit.View.dll" "$STUB_TMP/System.Windows.Forms.dll" "$STUB_TMP/System.Drawing.Common.dll")
+cp -f "${STUB_FILES[@]}" "$OUTPUT_DIR/"
+cp -f "${STUB_FILES[@]}" "$NATIVE_DIR/"
 rm -rf "$STUB_TMP"
 
 # Ensure native libraries are present next to executable

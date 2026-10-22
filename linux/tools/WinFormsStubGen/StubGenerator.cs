@@ -286,6 +286,9 @@ public static class StubGenerator
 
         // Generate LiveSplit.View.dll
         GenerateLiveSplitView(options, winFormsAsm, coreAsm, drawingAsm);
+        GenerateSystemDrawingCommon(options, drawingAsm, supportAsm);
+        GenerateSystemDrawing(options, drawingAsm, supportAsm);
+        GenerateSystemWindowsForms(options, winFormsAsm);
 
         // Copy LiveSplit.Core and LiveSplit.Drawing to outDir if not present
         string outCore = Path.Combine(options.OutDir, Path.GetFileName(options.CorePath));
@@ -900,6 +903,24 @@ public static class StubGenerator
         public MethodReference DgvRowCountSet { get; set; } = null!;
         public MethodReference DgvColumnCountSet { get; set; } = null!;
         public MethodReference DgvBandGetIndex { get; set; } = null!;
+        public MethodReference DgvBandSetIndex { get; set; } = null!;
+        public MethodReference DgvRowAddEmpty { get; set; } = null!;
+        public MethodReference DgvRowAddCount { get; set; } = null!;
+        public MethodReference DgvRowAddRow { get; set; } = null!;
+        public MethodReference DgvRowAddRange { get; set; } = null!;
+        public MethodReference DgvRowInsert { get; set; } = null!;
+        public MethodReference DgvRowCreateCells { get; set; } = null!;
+        public MethodReference DgvColAddCol { get; set; } = null!;
+        public MethodReference DgvColAddRange { get; set; } = null!;
+        public MethodReference DgvGetElementDgv { get; set; } = null!;
+        public MethodReference ComboBoxSetDataSource { get; set; } = null!;
+        public MethodReference ComboBoxSetSelectedIndex { get; set; } = null!;
+        public MethodReference ComboBoxSetSelectedItem { get; set; } = null!;
+        public MethodReference ComboBoxGetSelectedItem { get; set; } = null!;
+        public MethodReference ComboBoxGetSelectedValue { get; set; } = null!;
+        public MethodReference ComboBoxSetSelectedValue { get; set; } = null!;
+        public MethodReference BindingSourceSetDataSource { get; set; } = null!;
+        public MethodReference BindingSourceGetList { get; set; } = null!;
         public MethodReference TsmiAdd { get; set; } = null!;
         public MethodReference ClampNumeric { get; set; } = null!;
         public MethodReference InvokeDelegate { get; set; } = null!;
@@ -982,6 +1003,24 @@ public static class StubGenerator
             DgvRowCountSet = ImportSupport("DgvRowCountSet"),
             DgvColumnCountSet = ImportSupport("DgvColumnCountSet"),
             DgvBandGetIndex = ImportSupport("DgvBandGetIndex"),
+            DgvBandSetIndex = ImportSupport("DgvBandSetIndex"),
+            DgvRowAddEmpty = ImportSupport("DgvRowCollectionAddEmpty"),
+            DgvRowAddCount = ImportSupport("DgvRowCollectionAddCount"),
+            DgvRowAddRow = ImportSupport("DgvRowCollectionAddRow"),
+            DgvRowAddRange = ImportSupport("DgvRowCollectionAddRange"),
+            DgvRowInsert = ImportSupport("DgvRowCollectionInsert"),
+            DgvRowCreateCells = ImportSupport("DgvRowCreateCells"),
+            DgvColAddCol = ImportSupport("DgvColumnCollectionAddCol"),
+            DgvColAddRange = ImportSupport("DgvColumnCollectionAddRange"),
+            DgvGetElementDgv = ImportSupport("DgvGetElementDataGridView"),
+            ComboBoxSetDataSource = ImportSupport("ComboBoxSetDataSource"),
+            ComboBoxSetSelectedIndex = ImportSupport("ComboBoxSetSelectedIndex"),
+            ComboBoxSetSelectedItem = ImportSupport("ComboBoxSetSelectedItem"),
+            ComboBoxGetSelectedItem = ImportSupport("ComboBoxGetSelectedItem"),
+            ComboBoxGetSelectedValue = ImportSupport("ComboBoxGetSelectedValue"),
+            ComboBoxSetSelectedValue = ImportSupport("ComboBoxSetSelectedValue"),
+            BindingSourceSetDataSource = ImportSupport("BindingSourceSetDataSource"),
+            BindingSourceGetList = ImportSupport("BindingSourceGetList"),
             TsmiAdd = ImportSupport("ToolStripItemCollectionAdd"),
             ClampNumeric = ImportSupport("ClampNumeric"),
             InvokeDelegate = ImportSupport("InvokeDelegate"),
@@ -1397,7 +1436,7 @@ public static class StubGenerator
         {
             if (prop.GetMethod != null) propertyMethods.Add(prop.GetMethod);
             if (prop.SetMethod != null) propertyMethods.Add(prop.SetMethod);
-            ImplementProperty(prop, type, ctx, backingFields, eventFields, isCollection);
+            ImplementProperty(prop, type, ctx, backingFields, eventFields, isCollection, propertyMethods);
         }
 
         var eventMethods = new HashSet<MethodDefinition>();
@@ -1704,6 +1743,8 @@ public static class StubGenerator
         string pTypeName = pType.Name;
         string pTypeFull = pType.FullName;
 
+        if (propName == "CurrentRow") return false;
+
         // Specific allowed lazy properties:
         if (propName is "RowTemplate" or "HeaderCell" or "FlatAppearance" or "VerticalScroll" or "HorizontalScroll"
             or "ContentPanel" or "RightToolStripPanel" or "LeftToolStripPanel" or "TopToolStripPanel" or "BottomToolStripPanel") return true;
@@ -1727,7 +1768,7 @@ public static class StubGenerator
             or "DataGridViewRowCollection" or "DataGridViewColumnCollection" or "DataGridViewCellCollection"
             or "ListViewItemCollection" or "ColumnHeaderCollection" or "ObjectCollection"
             or "ImageCollection" or "HeaderCollection" or "AutoCompleteStringCollection"
-            or "ListViewSubItemCollection" or "DataGridViewRow" or "DataGridViewColumnHeaderCell"
+            or "ListViewSubItemCollection" or "DataGridViewColumnHeaderCell"
             or "FlatButtonAppearance" or "VScrollProperties" or "HScrollProperties"
             or "ToolStripContentPanel" or "ToolStripPanel")
         {
@@ -1767,7 +1808,7 @@ public static class StubGenerator
 
     private static void ImplementProperty(PropertyDefinition prop, TypeDefinition type, StubContext ctx,
         Dictionary<string, FieldReference> backingFields, Dictionary<string, FieldReference> eventFields,
-        bool isCollection)
+        bool isCollection, HashSet<MethodDefinition> propertyMethods)
     {
         if (prop.Parameters.Count > 0) // Indexer
         {
@@ -1857,6 +1898,9 @@ public static class StubGenerator
             {
                 var m = prop.SetMethod;
                 m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.DgvBandSetIndex));
                 m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
             }
             return;
@@ -1916,6 +1960,259 @@ public static class StubGenerator
             return;
         }
 
+        if (type.Name == "DataGridView" && prop.Name == "CurrentRow")
+        {
+            backingFields.TryGetValue("CurrentRow", out var curRowBf);
+            if (curRowBf == null)
+            {
+                var newFld = new FieldDefinition("<CurrentRow>k__BackingField", FieldAttributes.Private, prop.PropertyType);
+                type.Fields.Add(newFld);
+                curRowBf = newFld;
+                backingFields["CurrentRow"] = curRowBf;
+            }
+
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldfld, curRowBf));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            if (prop.SetMethod == null)
+            {
+                var setM = new MethodDefinition("set_CurrentRow",
+                    MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName,
+                    ctx.Module.TypeSystem.Void);
+                setM.Parameters.Add(new ParameterDefinition("value", ParameterAttributes.None, prop.PropertyType));
+                setM.Body = new MethodBody(setM);
+                setM.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                setM.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                setM.Body.Instructions.Add(Instruction.Create(OpCodes.Stfld, curRowBf));
+                setM.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                type.Methods.Add(setM);
+                prop.SetMethod = setM;
+                propertyMethods.Add(setM);
+            }
+            else
+            {
+                var m = prop.SetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Stfld, curRowBf));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if (type.Name == "DataGridView" && prop.Name == "IsCurrentRowDirty")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if ((type.Name == "DataGridViewRow" || InheritsFrom(type, "DataGridViewRow")) && prop.Name == "IsNewRow")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if ((type.Name == "DataGridViewElement" || InheritsFrom(type, "DataGridViewElement")) && prop.Name == "DataGridView")
+        {
+            if (prop.GetMethod != null)
+            {
+                var m = prop.GetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.DgvGetElementDgv));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            if (prop.SetMethod != null)
+            {
+                var m = prop.SetMethod;
+                m.Body = new MethodBody(m);
+                m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+            }
+            return;
+        }
+
+        if (type.Name == "BindingSource")
+        {
+            if (prop.Name == "DataSource")
+            {
+                backingFields.TryGetValue("DataSource", out var dsBf);
+                if (dsBf == null)
+                {
+                    var newFld = new FieldDefinition("<DataSource>k__BackingField", FieldAttributes.Private, prop.PropertyType);
+                    type.Fields.Add(newFld);
+                    dsBf = newFld;
+                    backingFields["DataSource"] = dsBf;
+                }
+
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldfld, dsBf));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                if (prop.SetMethod != null)
+                {
+                    var m = prop.SetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Stfld, dsBf));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.BindingSourceSetDataSource));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+            if (prop.Name == "List")
+            {
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.BindingSourceGetList));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+        }
+
+        if (type.Name is "ComboBox" or "ListBox" || InheritsFrom(type, "ListControl"))
+        {
+            if (prop.Name == "DataSource")
+            {
+                backingFields.TryGetValue("DataSource", out var dsBf);
+                if (dsBf == null)
+                {
+                    var newFld = new FieldDefinition("<DataSource>k__BackingField", FieldAttributes.Private, prop.PropertyType);
+                    type.Fields.Add(newFld);
+                    dsBf = newFld;
+                    backingFields["DataSource"] = dsBf;
+                }
+
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldfld, dsBf));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                if (prop.SetMethod != null)
+                {
+                    var m = prop.SetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Stfld, dsBf));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxSetDataSource));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+            if (prop.Name == "SelectedIndex")
+            {
+                backingFields.TryGetValue("SelectedIndex", out var idxBf);
+                if (idxBf == null)
+                {
+                    var newFld = new FieldDefinition("<SelectedIndex>k__BackingField", FieldAttributes.Private, prop.PropertyType);
+                    type.Fields.Add(newFld);
+                    idxBf = newFld;
+                    backingFields["SelectedIndex"] = idxBf;
+                }
+
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldfld, idxBf));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                if (prop.SetMethod != null)
+                {
+                    var m = prop.SetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxSetSelectedIndex));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+            if (prop.Name == "SelectedItem")
+            {
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxGetSelectedItem));
+                    if (prop.PropertyType.FullName != "System.Object")
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                if (prop.SetMethod != null)
+                {
+                    var m = prop.SetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxSetSelectedItem));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+            if (prop.Name == "SelectedValue")
+            {
+                if (prop.GetMethod != null)
+                {
+                    var m = prop.GetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxGetSelectedValue));
+                    if (prop.PropertyType.FullName != "System.Object")
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Castclass, prop.PropertyType));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                if (prop.SetMethod != null)
+                {
+                    var m = prop.SetMethod;
+                    m.Body = new MethodBody(m);
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Call, ctx.ComboBoxSetSelectedValue));
+                    m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                }
+                return;
+            }
+        }
+
         if (type.Name == "Padding")
         {
             if (prop.Name == "All")
@@ -1948,94 +2245,6 @@ public static class StubGenerator
                 }
                 return;
             }
-        }
-
-        if ((type.Name == "ComboBox" || type.Name == "ListBox") && prop.Name == "SelectedItem")
-        {
-            backingFields.TryGetValue("SelectedItem", out var selBf);
-            if (prop.GetMethod != null)
-            {
-                var m = prop.GetMethod;
-                m.Body = new MethodBody(m);
-                var il = m.Body.Instructions;
-
-                backingFields.TryGetValue("SelectedIndex", out var idxFld);
-                backingFields.TryGetValue("Items", out var itemsFld);
-
-                if (selBf != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, selBf));
-                }
-                else
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                }
-
-                if (idxFld != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, idxFld));
-                }
-                else
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldc_I4_M1));
-                }
-
-                if (itemsFld != null)
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, itemsFld));
-                }
-                else
-                {
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                }
-
-                il.Add(Instruction.Create(OpCodes.Call, ctx.GetSelItem));
-                il.Add(Instruction.Create(OpCodes.Ret));
-            }
-            if (prop.SetMethod != null && selBf != null)
-            {
-                var m = prop.SetMethod;
-                m.Body = new MethodBody(m);
-                var il = m.Body.Instructions;
-                eventFields.TryGetValue("SelectedIndexChanged", out var selChangedEvt);
-
-                var exitLabel = Instruction.Create(OpCodes.Nop);
-
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldfld, selBf));
-                il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Call, ctx.ValuesEqual));
-                il.Add(Instruction.Create(OpCodes.Brtrue_S, exitLabel));
-
-                il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                il.Add(Instruction.Create(OpCodes.Ldarg_1));
-                il.Add(Instruction.Create(OpCodes.Stfld, selBf));
-
-                if (selChangedEvt != null)
-                {
-                    var popAndExit = Instruction.Create(OpCodes.Nop);
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldfld, selChangedEvt));
-                    il.Add(Instruction.Create(OpCodes.Dup));
-                    il.Add(Instruction.Create(OpCodes.Brfalse_S, popAndExit));
-
-                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
-                    il.Add(Instruction.Create(OpCodes.Ldnull));
-                    il.Add(Instruction.Create(OpCodes.Ldstr, "SelectedIndexChanged"));
-                    il.Add(Instruction.Create(OpCodes.Call, ctx.FireEvent));
-                    il.Add(Instruction.Create(OpCodes.Br_S, exitLabel));
-
-                    il.Add(popAndExit);
-                    il.Add(Instruction.Create(OpCodes.Pop));
-                }
-
-                il.Add(exitLabel);
-                il.Add(Instruction.Create(OpCodes.Ret));
-            }
-            return;
         }
 
         backingFields.TryGetValue(prop.Name, out var bf);
@@ -2762,6 +2971,71 @@ public static class StubGenerator
         {
             if (m.Name == "Add")
             {
+                if (type.Name == "DataGridViewRowCollection")
+                {
+                    if (m.Parameters.Count == 0)
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAddEmpty));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                    if (m.Parameters.Count == 1)
+                    {
+                        if (m.Parameters[0].ParameterType.FullName == "System.Object[]")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                            il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                            il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAdd));
+                            if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                            il.Add(Instruction.Create(OpCodes.Ret));
+                            return;
+                        }
+                        if (m.Parameters[0].ParameterType.FullName == "System.Int32")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                            il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                            il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAddCount));
+                            if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                            il.Add(Instruction.Create(OpCodes.Ret));
+                            return;
+                        }
+                        if (m.Parameters[0].ParameterType.Name == "DataGridViewRow")
+                        {
+                            il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                            il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                            il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAddRow));
+                            if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                            il.Add(Instruction.Create(OpCodes.Ret));
+                            return;
+                        }
+                    }
+                }
+
+                if (type.Name == "DataGridViewColumnCollection")
+                {
+                    if (m.Parameters.Count == 1 && m.Parameters[0].ParameterType.Name == "DataGridViewColumn")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.DgvColAddCol));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                    if (m.Parameters.Count == 2 && m.Parameters[0].ParameterType.FullName == "System.String" && m.Parameters[1].ParameterType.FullName == "System.String")
+                    {
+                        il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                        il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                        il.Add(Instruction.Create(OpCodes.Call, ctx.DgvColAdd));
+                        if (m.ReturnType.FullName == "System.Void") il.Add(Instruction.Create(OpCodes.Pop));
+                        il.Add(Instruction.Create(OpCodes.Ret));
+                        return;
+                    }
+                }
+
                 if (m.Parameters.Count == 0)
                 {
                     il.Add(Instruction.Create(OpCodes.Ldarg_0));
@@ -2966,6 +3240,22 @@ public static class StubGenerator
             }
             if (m.Name == "AddRange")
             {
+                if (type.Name == "DataGridViewRowCollection" && m.Parameters.Count == 1)
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowAddRange));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
+                if (type.Name == "DataGridViewColumnCollection" && m.Parameters.Count == 1)
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.DgvColAddRange));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
                 if (m.Parameters.Count == 1)
                 {
                     il.Add(Instruction.Create(OpCodes.Ldarg_0));
@@ -3023,6 +3313,17 @@ public static class StubGenerator
             }
             if (m.Name == "Insert")
             {
+                if (type.Name == "DataGridViewRowCollection" && m.Parameters.Count == 2)
+                {
+                    il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                    il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                    if (m.Parameters[1].ParameterType.IsValueType)
+                        il.Add(Instruction.Create(OpCodes.Box, m.Parameters[1].ParameterType));
+                    il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowInsert));
+                    il.Add(Instruction.Create(OpCodes.Ret));
+                    return;
+                }
                 if (m.Parameters.Count >= 2)
                 {
                     var elemTypeRef = GetCollectionElementType(type);
@@ -3120,6 +3421,28 @@ public static class StubGenerator
             {
                 il.Add(Instruction.Create(OpCodes.Ldarg_0));
                 il.Add(Instruction.Create(OpCodes.Call, ctx.ColGetEnumerator));
+                il.Add(Instruction.Create(OpCodes.Ret));
+                return;
+            }
+        }
+
+        if ((type.Name == "DataGridViewRow" || InheritsFrom(type, "DataGridViewRow")) && m.Name == "CreateCells")
+        {
+            if (m.Parameters.Count == 1)
+            {
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                il.Add(Instruction.Create(OpCodes.Ldnull));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowCreateCells));
+                il.Add(Instruction.Create(OpCodes.Ret));
+                return;
+            }
+            if (m.Parameters.Count == 2)
+            {
+                il.Add(Instruction.Create(OpCodes.Ldarg_0));
+                il.Add(Instruction.Create(OpCodes.Ldarg_1));
+                il.Add(Instruction.Create(OpCodes.Ldarg_2));
+                il.Add(Instruction.Create(OpCodes.Call, ctx.DgvRowCreateCells));
                 il.Add(Instruction.Create(OpCodes.Ret));
                 return;
             }
@@ -3482,6 +3805,178 @@ public static class StubGenerator
 
         string outViewPath = Path.Combine(options.OutDir, "LiveSplit.View.dll");
         viewAsm.Write(outViewPath);
+    }
+
+    private static void GenerateSystemDrawingCommon(GeneratorOptions options, AssemblyDefinition drawingAsm, AssemblyDefinition supportAsm)
+    {
+        var asmName = new AssemblyNameDefinition("System.Drawing.Common", new Version(4, 0, 0, 0))
+        {
+            PublicKeyToken = new byte[] { 0xcc, 0x7b, 0x13, 0xff, 0xcd, 0x2d, 0xdd, 0x51 }
+        };
+        var commonAsm = AssemblyDefinition.CreateAssembly(asmName, "System.Drawing.Common.dll", ModuleKind.Dll);
+        var module = commonAsm.MainModule;
+
+        var drawingRef = new AssemblyNameReference(drawingAsm.Name.Name, drawingAsm.Name.Version)
+        {
+            PublicKeyToken = drawingAsm.Name.PublicKeyToken
+        };
+        module.AssemblyReferences.Add(drawingRef);
+
+        var supportRef = new AssemblyNameReference(supportAsm.Name.Name, supportAsm.Name.Version)
+        {
+            PublicKeyToken = supportAsm.Name.PublicKeyToken
+        };
+        module.AssemblyReferences.Add(supportRef);
+
+        var primitivesRef = new AssemblyNameReference("System.Drawing.Primitives", new Version(10, 0, 0, 0))
+        {
+            PublicKeyToken = new byte[] { 0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a }
+        };
+        module.AssemblyReferences.Add(primitivesRef);
+
+        var seen = new HashSet<string>();
+
+        foreach (var t in supportAsm.MainModule.Types.Where(t => t.IsPublic && !t.IsNested && t.Namespace.StartsWith("System.Drawing")))
+        {
+            if (seen.Add(t.FullName))
+            {
+                var exp = new ExportedType(t.Namespace, t.Name, module, supportRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        foreach (var t in drawingAsm.MainModule.Types.Where(t => t.IsPublic && !t.IsNested && t.Namespace.StartsWith("System.Drawing")))
+        {
+            if (seen.Add(t.FullName))
+            {
+                var exp = new ExportedType(t.Namespace, t.Name, module, drawingRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        string[] primitiveTypeNames = ["Point", "PointF", "Size", "SizeF", "Rectangle", "RectangleF", "Color"];
+        foreach (var name in primitiveTypeNames)
+        {
+            if (seen.Add($"System.Drawing.{name}"))
+            {
+                var exp = new ExportedType("System.Drawing", name, module, primitivesRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        string outCommonPath = Path.Combine(options.OutDir, "System.Drawing.Common.dll");
+        commonAsm.Write(outCommonPath);
+    }
+
+    private static void GenerateSystemDrawing(GeneratorOptions options, AssemblyDefinition drawingAsm, AssemblyDefinition supportAsm)
+    {
+        var asmName = new AssemblyNameDefinition("System.Drawing", new Version(4, 0, 0, 0))
+        {
+            PublicKeyToken = new byte[] { 0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a }
+        };
+        var sysDrawingAsm = AssemblyDefinition.CreateAssembly(asmName, "System.Drawing.dll", ModuleKind.Dll);
+        var module = sysDrawingAsm.MainModule;
+
+        var drawingRef = new AssemblyNameReference(drawingAsm.Name.Name, drawingAsm.Name.Version)
+        {
+            PublicKeyToken = drawingAsm.Name.PublicKeyToken
+        };
+        module.AssemblyReferences.Add(drawingRef);
+
+        var supportRef = new AssemblyNameReference(supportAsm.Name.Name, supportAsm.Name.Version)
+        {
+            PublicKeyToken = supportAsm.Name.PublicKeyToken
+        };
+        module.AssemblyReferences.Add(supportRef);
+
+        var primitivesRef = new AssemblyNameReference("System.Drawing.Primitives", new Version(10, 0, 0, 0))
+        {
+            PublicKeyToken = new byte[] { 0xb0, 0x3f, 0x5f, 0x7f, 0x11, 0xd5, 0x0a, 0x3a }
+        };
+        module.AssemblyReferences.Add(primitivesRef);
+
+        var seen = new HashSet<string>();
+
+        foreach (var t in supportAsm.MainModule.Types.Where(t => t.IsPublic && !t.IsNested && t.Namespace.StartsWith("System.Drawing")))
+        {
+            if (seen.Add(t.FullName))
+            {
+                var exp = new ExportedType(t.Namespace, t.Name, module, supportRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        foreach (var t in drawingAsm.MainModule.Types.Where(t => t.IsPublic && !t.IsNested && t.Namespace.StartsWith("System.Drawing")))
+        {
+            if (seen.Add(t.FullName))
+            {
+                var exp = new ExportedType(t.Namespace, t.Name, module, drawingRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        string[] primitiveTypeNames = ["Point", "PointF", "Size", "SizeF", "Rectangle", "RectangleF", "Color"];
+        foreach (var name in primitiveTypeNames)
+        {
+            if (seen.Add($"System.Drawing.{name}"))
+            {
+                var exp = new ExportedType("System.Drawing", name, module, primitivesRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        string outSysDrawingPath = Path.Combine(options.OutDir, "System.Drawing.dll");
+        sysDrawingAsm.Write(outSysDrawingPath);
+    }
+
+    private static void GenerateSystemWindowsForms(GeneratorOptions options, AssemblyDefinition winFormsAsm)
+    {
+        var asmName = new AssemblyNameDefinition("System.Windows.Forms", new Version(4, 0, 0, 0))
+        {
+            PublicKeyToken = new byte[] { 0xb7, 0x7a, 0x5c, 0x56, 0x19, 0x34, 0xe0, 0x89 }
+        };
+        var swfAsm = AssemblyDefinition.CreateAssembly(asmName, "System.Windows.Forms.dll", ModuleKind.Dll);
+        var module = swfAsm.MainModule;
+
+        var winFormsRef = new AssemblyNameReference(winFormsAsm.Name.Name, winFormsAsm.Name.Version)
+        {
+            PublicKeyToken = winFormsAsm.Name.PublicKeyToken
+        };
+        module.AssemblyReferences.Add(winFormsRef);
+
+        var seen = new HashSet<string>();
+        foreach (var t in winFormsAsm.MainModule.Types.Where(t => t.IsPublic && !t.IsNested))
+        {
+            if (seen.Add(t.FullName))
+            {
+                var exp = new ExportedType(t.Namespace, t.Name, module, winFormsRef)
+                {
+                    Attributes = TypeAttributes.Public | TypeAttributes.Forwarder
+                };
+                module.ExportedTypes.Add(exp);
+            }
+        }
+
+        string outSwfPath = Path.Combine(options.OutDir, "System.Windows.Forms.dll");
+        swfAsm.Write(outSwfPath);
     }
 
     private static void PushDefaultValue(Mono.Collections.Generic.Collection<Instruction> il, MethodBody body, TypeReference retType, ModuleDefinition module)

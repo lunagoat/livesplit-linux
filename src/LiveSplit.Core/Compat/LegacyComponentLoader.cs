@@ -93,7 +93,7 @@ public static class LegacyComponentLoader
             }
 
             string stub = Path.Combine(AppContext.BaseDirectory, name.Name + ".dll");
-            if ((name.Name.StartsWith("LiveSplit.Compat.", StringComparison.Ordinal) || name.Name == "LiveSplit.View") && File.Exists(stub))
+            if ((name.Name.StartsWith("LiveSplit.Compat.", StringComparison.Ordinal) || name.Name is "LiveSplit.View" or "System.Windows.Forms" or "System.Drawing.Common") && File.Exists(stub))
             {
                 return AssemblyLoadContext.Default.LoadFromAssemblyPath(stub);
             }
